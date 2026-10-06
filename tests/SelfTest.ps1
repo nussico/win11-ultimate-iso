@@ -85,7 +85,6 @@ $q = Get-UupRequest @('Windows 11 Pro') $true
 Assert ($q.Body -match 'updates=0' -and $q.Updates -eq 0 -and $q.Edition -eq 'PROFESSIONAL' -and $q.Body -match 'autodl=2') 'Fast mode: no update integration'
 $q = Get-UupRequest @('Windows 11 Home', 'Windows 11 Enterprise') $false
 Assert ($q.Body -match 'updates=1' -and $q.Edition -eq 'CORE;PROFESSIONAL' -and $q.Body -match 'autodl=3' -and $q.Body -match 'virtualEditions\[\]=Enterprise') 'Normal mode + virtual edition adds Pro base'
-Assert ((Get-CapabilityLang 'en-us') -eq 'en-US' -and (Get-CapabilityLang 'sr-latn-rs') -eq 'sr-Latn-RS') 'Capability language casing'
 
 # Background build wiring (same pattern as Builder.ps1). Cancel is preset, so nothing is built.
 $sync = [hashtable]::Synchronized(@{ Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]'; Step = 0; Cancel = $true; Done = $false; Error = $null })

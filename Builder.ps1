@@ -55,12 +55,6 @@ $ui.BrowseIso.Add_Click({ Select-Folder $ui.IsoFolder })
 foreach ($l in $langs) { $ui.BaseLang.Items.Add($l) | Out-Null; $ui.Keyboard.Items.Add($l) | Out-Null; $ui.Locale.Items.Add($l) | Out-Null }
 $defLang = if ($langs -contains 'de-de') { 'de-de' } else { $langs[0] }
 $ui.BaseLang.SelectedItem = $defLang; $ui.Keyboard.SelectedItem = $defLang; $ui.Locale.SelectedItem = $defLang
-$langChecks = [ordered]@{}
-foreach ($l in $langs) {
-    $langChecks[$l] = New-Check $l 'Chip' ($l -eq 'en-us')
-    try { $langChecks[$l].ToolTip = [Globalization.CultureInfo]::GetCultureInfo($l).DisplayName } catch { }
-    $ui.LangPanel.Children.Add($langChecks[$l]) | Out-Null
-}
 
 # --- Editions ---
 $defaultEditions = 'Windows 11 Home', 'Windows 11 Pro', 'Windows 11 Education'
@@ -136,15 +130,13 @@ function Set-Preset($Name) {
 }
 function Update-Summary {
     $ed = @($script:edChecks.Keys | Where-Object { $script:edChecks[$_].IsChecked }).Count
-    $lp = @($langChecks.Keys | Where-Object { $langChecks[$_].IsChecked -and $_ -ne $ui.BaseLang.SelectedItem }).Count
     $pa = @($patchChecks.Values | Where-Object IsChecked).Count
-    $ui.Summary.Text = "$ed editions, $($ui.BaseLang.SelectedItem) + $lp language packs, $pa patches" + $(if ($ui.UnattendOn.IsChecked) { ', unattended' } else { '' })
+    $ui.Summary.Text = "$ed editions, $($ui.BaseLang.SelectedItem), $pa patches" + $(if ($ui.UnattendOn.IsChecked) { ', unattended' } else { '' })
 }
 $ui.Preset.Add_SelectionChanged({ Set-Preset $ui.Preset.SelectedItem })
 foreach ($c in @($patchChecks.Values) + $ui.SkipOobe + $ui.RunWinUtil) {
     $c.Add_Click({ if (-not $script:applying) { $ui.Preset.SelectedItem = 'Custom' }; Update-Summary })
 }
-foreach ($c in $langChecks.Values) { $c.Add_Click({ Update-Summary }) }
 
 $ui.ScanIsos.Add_Click({
         $win.Cursor = 'Wait'
@@ -165,7 +157,6 @@ function Get-Config {
     if ($ui.Build.SelectedIndex -gt 0) { $uuid = $buildList[$ui.Build.SelectedIndex - 1].uuid }
     @{
         IsoFolder = $ui.IsoFolder.Text; UseUup = [bool]$ui.UseUup.IsChecked; Newest = [bool]$ui.Newest.IsChecked; Fast = [bool]$ui.Fast.IsChecked; UupBuild = $uuid; BaseLang = [string]$ui.BaseLang.SelectedItem
-        LangPacks = @($langChecks.Keys | Where-Object { $langChecks[$_].IsChecked -and $_ -ne $ui.BaseLang.SelectedItem })
         Editions = @($script:edChecks.Keys | Where-Object { $script:edChecks[$_].IsChecked })
         Patches = @($Patches.Keys | Where-Object { $patchChecks[$_].IsChecked }); DriversPath = $ui.DriversPath.Text
         Unattend = @{
@@ -199,7 +190,7 @@ function Test-Config($c) {
 # --- Build run (background runspace, polled by a timer) ---
 $script:job = $null
 $timer = New-Object Windows.Threading.DispatcherTimer -Property @{ Interval = [TimeSpan]::FromMilliseconds(300) }
-$stepNames = 'Preflight', 'Sources', 'Editions', 'Language packs + patches', 'Setup (boot.wim)', 'Unattended', 'Compress', 'Create ISO', 'Finish'
+$stepNames = 'Preflight', 'Sources', 'Editions', 'Patches', 'Setup (boot.wim)', 'Unattended', 'Compress', 'Create ISO', 'Finish'
 $timer.Add_Tick({
         $line = $null
         while ($script:sync.Log.TryDequeue([ref]$line)) { $ui.Log.AppendText("$line`r`n"); $ui.Log.ScrollToEnd() }

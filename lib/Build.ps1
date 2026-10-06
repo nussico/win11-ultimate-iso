@@ -28,7 +28,6 @@ function Write-BuildHeader($Cfg) {
     Write-Log "Host:           $((Get-CimInstance Win32_OperatingSystem).Caption) $([Environment]::OSVersion.Version), PowerShell $($PSVersionTable.PSVersion)"
     Write-Log "Editions:       $($Cfg.Editions -join ', ')"
     Write-Log "Base language:  $($Cfg.BaseLang)"
-    Write-Log "Language packs: $(if ($Cfg.LangPacks) { $Cfg.LangPacks -join ', ' } else { 'none' })"
     Write-Log "Patches:        $(if ($Cfg.Patches) { ($Cfg.Patches | ForEach-Object { $Patches[$_].Label }) -join '; ' } else { 'none' })"
     Write-Log "Source:         ISO folder $($Cfg.IsoFolder); UUP dump $(if ($Cfg.UseUup) { 'on' } else { 'off' }); always newest $(if ($Cfg.Newest) { 'on' } else { 'off' }); fast mode $(if ($Cfg.Fast) { 'on' } else { 'off' })"
     Write-Log "Unattended:     $(if ($u.Enabled) { "user '$($u.UserName)', auto-install $($u.AutoInstall), edition '$($u.Edition)', $(if ($u.ProductKey) { 'own product key' } else { 'generic key' }), skip OOBE $($u.SkipOobe)" } else { 'off' })"
@@ -134,7 +133,7 @@ function Invoke-Build($Cfg, $Sync) {
         if (-not $found) { Write-Log "No ISOs in $($Cfg.IsoFolder)" }
         $base = $found | Where-Object Lang -eq $Cfg.BaseLang | Sort-Object { [int]$_.Build } -Descending | Select-Object -First 1
         $builds = $null; $newest = $null
-        if ($Cfg.UseUup -or $Cfg.LangPacks) {
+        if ($Cfg.UseUup) {
             $builds = Get-UupBuilds
             $newest = Select-NewestUupBuild $builds
             if ($newest) { Write-Log "Newest Windows: $($newest.title)" }
@@ -150,7 +149,7 @@ function Invoke-Build($Cfg, $Sync) {
         }
         $major = if ($base) { $base.Build } elseif ($newest) { $newest.build.Split('.')[0] } else { throw 'Could not reach UUP dump' }
         $uup = $null
-        if ($missing -or $Cfg.LangPacks) {
+        if ($missing) {
             $uup = if ($Cfg.UupBuild) { $builds | Where-Object uuid -eq $Cfg.UupBuild } else { Select-UupBuild $builds $major }
             if (-not $uup) { throw "No UUP dump build found for build $major" }
             if ($uup.build.Split('.')[0] -ne $major) { throw "UUP build $($uup.build) does not match ISO build $major. Pick a $major build." }
@@ -183,12 +182,6 @@ function Invoke-Build($Cfg, $Sync) {
         $ErrorActionPreference = 'Stop'
         Remove-Item "$w\iso\sources\install.wim", "$w\iso\sources\install.esd" -ErrorAction SilentlyContinue
 
-        $lps = @()
-        foreach ($lang in $Cfg.LangPacks | Where-Object { $_ -ne $Cfg.BaseLang }) {
-            Write-Log "Language pack $lang"
-            $lps += Save-UupLanguagePack $uup.uuid $lang "$($Cfg.CacheDir)\$($uup.uuid)"
-            Write-Log " build $($lps[-1].Build), features: $(if ($lps[-1].Capabilities) { $lps[-1].Capabilities -join ', ' } else { 'none' })"
-        }
 
         Enter-Step 3 'Editions'
         foreach ($s in $sources) {
@@ -199,20 +192,12 @@ function Invoke-Build($Cfg, $Sync) {
         }
         Clear-BuildState
 
-        Enter-Step 4 'Language packs + patches'
+        Enter-Step 4 'Patches'
         $images = Get-WindowsImage -ImagePath "$w\install.wim"
         foreach ($img in $images) {
             if ($Sync.Cancel) { throw 'Cancelled by user' }
             Write-Log "Mount $($img.ImageName) - takes 1-2 minutes"
             Mount-WindowsImage -ImagePath "$w\install.wim" -Index $img.ImageIndex -Path "$w\mount" | Out-Null
-            foreach ($lp in $lps) {
-                Write-Log " add LP $($lp.Lp)"
-                Add-WindowsPackage -Path "$w\mount" -PackagePath $lp.Lp | Out-Null
-                foreach ($cap in $lp.Capabilities) {
-                    try { Add-WindowsCapability -Path "$w\mount" -Name $cap -Source $lp.FodDir -LimitAccess | Out-Null; Write-Log "  + $cap" }
-                    catch { Write-Log "  WARN $cap not added (Windows installs it online later): $($_.Exception.Message.Split("`n")[0])" }
-                }
-            }
             Invoke-Patches "$w\mount" $Cfg.Patches $Cfg
             # ponytail: no StartComponentCleanup here (slow, small gain); the max-compression export in step 7 shrinks the image.
             Write-Log "Saving $($img.ImageName) - writing the image and cleaning up takes 3-5 minutes, no output meanwhile"

@@ -72,7 +72,7 @@ function New-UnattendXml($u) {
     }
 
     $intl = "<InputLocale>$(& $esc $u.Keyboard)</InputLocale><SystemLocale>$(& $esc $u.Locale)</SystemLocale>" +
-            "<UILanguage>$(& $esc $u.Locale)</UILanguage><UserLocale>$(& $esc $u.Locale)</UserLocale>"
+            "<UserLocale>$(& $esc $u.Locale)</UserLocale>"
 
     @"
 <?xml version="1.0" encoding="utf-8"?>

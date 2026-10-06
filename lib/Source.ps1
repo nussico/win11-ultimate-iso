@@ -8,7 +8,6 @@ $UupEditions = [ordered]@{
     'Windows 11 Education'  = @{ Virtual = 'Education' }
     'Windows 11 Enterprise' = @{ Virtual = 'Enterprise' }
 }
-$LpPattern = 'LanguagePack-Package|LanguageFeatures-(Basic|Handwriting|OCR)-'
 
 # $Images: Get-WindowsImage list output; $Detail: Get-WindowsImage -Index output.
 function ConvertTo-IsoInfo($Path, $Images, $Detail) {
@@ -73,35 +72,6 @@ function Save-Url($Url, $Out, $Sha1) {
     if ($LASTEXITCODE) { throw "Download failed: $Out" }
     if ($Sha1 -and (Get-FileHash $Out -Algorithm SHA1).Hash -ne $Sha1) { throw "Checksum mismatch: $Out" }
 }
-
-# Downloads the language pack + basic FoDs. Returns @{ Build; Lp = <expanded folder>; Fods = <cab paths> }.
-function Save-UupLanguagePack($Uuid, $Lang, $Dest) {
-    $r = (Invoke-RestMethod "$UupApi/get.php?id=$Uuid&lang=$Lang&edition=professional").response
-    $dir = New-Item -ItemType Directory -Force "$Dest\$Lang"
-    $files = $r.files.PSObject.Properties | Where-Object Name -match $LpPattern
-    if (-not ($files | Where-Object Name -match 'LanguagePack')) { throw "No language pack for $Lang in UUP build $($r.build)" }
-    foreach ($f in $files) { Save-Url $f.Value.url "$dir\$($f.Name)" $f.Value.sha1 }
-    # UUP ships the LP as .esd; DISM installs it from the expanded folder (update.mum).
-    $esd = Get-ChildItem $dir -Filter '*LanguagePack*.esd' | Select-Object -First 1
-    $lp = "$dir\lp"
-    if (-not (Test-Path "$lp\update.mum")) {
-        New-Item -ItemType Directory -Force $lp | Out-Null
-        Expand-WindowsImage -ImagePath $esd.FullName -Index 1 -ApplyPath $lp | Out-Null
-    }
-    # FoDs install as capabilities from a source folder that uses the canonical repository file names.
-    $fod = New-Item -ItemType Directory -Force "$dir\fod"
-    $features = @()
-    foreach ($feat in 'Basic', 'Handwriting', 'OCR') {
-        $cab = Get-ChildItem $dir -Filter "*LanguageFeatures-$feat-*.cab" | Select-Object -First 1
-        if (-not $cab) { continue }
-        Copy-Item $cab.FullName "$fod\Microsoft-Windows-LanguageFeatures-$feat-$Lang-Package~31bf3856ad364e35~amd64~~.cab" -Force
-        $features += "Language.$feat~~~$(Get-CapabilityLang $Lang)~0.0.1.0"
-    }
-    @{ Build = $r.build; Lp = $lp; FodDir = $fod.FullName; Capabilities = $features }
-}
-
-# 'en-us' -> 'en-US', 'sr-latn-rs' -> 'sr-Latn-RS' (casing used in capability names)
-function Get-CapabilityLang($Lang) { [Globalization.CultureInfo]::GetCultureInfo($Lang).Name }
 
 # UUP dump package request. Fast = skip integrating the latest cumulative update (Windows Update installs it later).
 function Get-UupRequest([string[]]$EditionNames, [bool]$Fast) {

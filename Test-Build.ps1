@@ -26,7 +26,6 @@ try {
         New-Item -ItemType Directory -Force $mount | Out-Null
         Mount-WindowsImage -ImagePath $wim -Index 1 -Path $mount -ReadOnly | Out-Null
         $pkgs = (Get-WindowsPackage -Path $mount).PackageName
-        foreach ($l in $cfg.LangPacks) { Check ($pkgs -match "LanguagePack.*~$l~") "Language pack $l installed" }
 
         $prov = (Get-AppxProvisionedPackage -Path $mount).DisplayName
         foreach ($a in 'Microsoft.WindowsStore', 'Microsoft.DesktopAppInstaller', 'Microsoft.WindowsCalculator', 'Microsoft.Windows.Photos', 'Microsoft.WindowsNotepad', 'Microsoft.XboxIdentityProvider') {
