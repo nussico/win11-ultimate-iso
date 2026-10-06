@@ -103,19 +103,30 @@ function Save-UupLanguagePack($Uuid, $Lang, $Dest) {
 # 'en-us' -> 'en-US', 'sr-latn-rs' -> 'sr-Latn-RS' (casing used in capability names)
 function Get-CapabilityLang($Lang) { [Globalization.CultureInfo]::GetCultureInfo($Lang).Name }
 
-# Builds an ISO with UUP dump's own download+convert package. Returns the ISO path.
-function Save-UupIso($Uuid, $Lang, [string[]]$EditionNames, $Dest) {
+# UUP dump package request. Fast = skip integrating the latest cumulative update (Windows Update installs it later).
+function Get-UupRequest([string[]]$EditionNames, [bool]$Fast) {
     $direct = @($EditionNames | ForEach-Object { $UupEditions[$_].Uup } | Where-Object { $_ })
     $virtual = @($EditionNames | ForEach-Object { $UupEditions[$_].Virtual } | Where-Object { $_ })
     if ($virtual -and 'PROFESSIONAL' -notin $direct) { $direct += 'PROFESSIONAL' }
-    $body = "autodl=$(if ($virtual) { 3 } else { 2 })&updates=1&cleanup=0" + (($virtual | ForEach-Object { "&virtualEditions[]=$_" }) -join '')
+    @{
+        Edition = $direct -join ';'
+        Virtual = $virtual
+        Updates = [int](-not $Fast)
+        Body    = "autodl=$(if ($virtual) { 3 } else { 2 })&updates=$([int](-not $Fast))&cleanup=0" + (($virtual | ForEach-Object { "&virtualEditions[]=$_" }) -join '')
+    }
+}
+
+# Builds an ISO with UUP dump's own download+convert package. Returns the ISO path.
+function Save-UupIso($Uuid, $Lang, [string[]]$EditionNames, $Dest, [bool]$Fast) {
+    $req = Get-UupRequest $EditionNames $Fast
     New-Item -ItemType Directory -Force $Dest | Out-Null
     $zip = "$Dest\uup.zip"
-    Invoke-WebRequest -UseBasicParsing -Method Post -Body $body -ContentType 'application/x-www-form-urlencoded' -OutFile $zip `
-        "https://uupdump.net/get.php?id=$Uuid&pack=$Lang&edition=$($direct -join ';')"
+    Invoke-WebRequest -UseBasicParsing -Method Post -Body $req.Body -ContentType 'application/x-www-form-urlencoded' -OutFile $zip `
+        "https://uupdump.net/get.php?id=$Uuid&pack=$Lang&edition=$($req.Edition)"
     Expand-Archive $zip $Dest -Force
     $ini = "$Dest\ConvertConfig.ini"
-    (Get-Content $ini) -replace '^AutoExit\s*=.*', 'AutoExit    =1' -replace '^vAutoEditions=.*', "vAutoEditions=$($virtual -join ',')" | Set-Content $ini
+    (Get-Content $ini) -replace '^AutoExit\s*=.*', 'AutoExit    =1' -replace '^AddUpdates\s*=.*', "AddUpdates   =$($req.Updates)" `
+        -replace '^vAutoEditions=.*', "vAutoEditions=$($req.Virtual -join ',')" | Set-Content $ini
     # stdin from NUL so any 'pause' returns immediately
     $p = Start-Process cmd.exe -ArgumentList '/c', 'uup_download_windows.cmd < NUL' -WorkingDirectory $Dest -Wait -PassThru -WindowStyle Minimized
     $iso = Get-ChildItem $Dest -Filter *.iso | Select-Object -First 1

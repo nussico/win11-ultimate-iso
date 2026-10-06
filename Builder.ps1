@@ -161,7 +161,7 @@ function Get-Config {
     $uuid = ''
     if ($ui.Build.SelectedIndex -gt 0) { $uuid = $buildList[$ui.Build.SelectedIndex - 1].uuid }
     @{
-        IsoFolder = $ui.IsoFolder.Text; UseUup = [bool]$ui.UseUup.IsChecked; Newest = [bool]$ui.Newest.IsChecked; UupBuild = $uuid; BaseLang = [string]$ui.BaseLang.SelectedItem
+        IsoFolder = $ui.IsoFolder.Text; UseUup = [bool]$ui.UseUup.IsChecked; Newest = [bool]$ui.Newest.IsChecked; Fast = [bool]$ui.Fast.IsChecked; UupBuild = $uuid; BaseLang = [string]$ui.BaseLang.SelectedItem
         LangPacks = @($langChecks.Keys | Where-Object { $langChecks[$_].IsChecked -and $_ -ne $ui.BaseLang.SelectedItem })
         Editions = @($script:edChecks.Keys | Where-Object { $script:edChecks[$_].IsChecked })
         Patches = @($Patches.Keys | Where-Object { $patchChecks[$_].IsChecked }); DriversPath = $ui.DriversPath.Text

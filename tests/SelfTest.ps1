@@ -75,6 +75,10 @@ Assert ((Select-NewestUupBuild $builds).uuid -eq 'b') 'Newest: 25H2 newest revis
 $builds += [pscustomobject]@{ title = 'Windows 11, version 26H2 (26300.1000)'; build = '26300.1000'; uuid = 'f' }
 Assert ((Select-NewestUupBuild $builds).uuid -eq 'f') 'Newest: switches to 26H2 once it exists'
 
+$q = Get-UupRequest @('Windows 11 Pro') $true
+Assert ($q.Body -match 'updates=0' -and $q.Updates -eq 0 -and $q.Edition -eq 'PROFESSIONAL' -and $q.Body -match 'autodl=2') 'Fast mode: no update integration'
+$q = Get-UupRequest @('Windows 11 Home', 'Windows 11 Enterprise') $false
+Assert ($q.Body -match 'updates=1' -and $q.Edition -eq 'CORE;PROFESSIONAL' -and $q.Body -match 'autodl=3' -and $q.Body -match 'virtualEditions\[\]=Enterprise') 'Normal mode + virtual edition adds Pro base'
 Assert ((Get-CapabilityLang 'en-us') -eq 'en-US' -and (Get-CapabilityLang 'sr-latn-rs') -eq 'sr-Latn-RS') 'Capability language casing'
 
 # Background build wiring (same pattern as Builder.ps1). Cancel is preset, so nothing is built.

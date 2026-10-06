@@ -113,7 +113,8 @@ function Invoke-Build($Cfg, $Sync) {
         }
         if ($missing) {
             Write-Log "Downloading via UUP dump: $($missing -join ', ') (this takes a while)"
-            $uupIso = Save-UupIso $uup.uuid $Cfg.BaseLang $missing "$w\uup"
+            if ($Cfg.Fast) { Write-Log 'Fast mode: latest update not integrated (Windows Update installs it after setup)' }
+            $uupIso = Save-UupIso $uup.uuid $Cfg.BaseLang $missing "$w\uup" $Cfg.Fast
             # Keep it with your ISOs so the next build reuses it instead of downloading again.
             New-Item -ItemType Directory -Force $Cfg.IsoFolder | Out-Null
             $uupIso = (Move-Item $uupIso $Cfg.IsoFolder -Force -PassThru).FullName
