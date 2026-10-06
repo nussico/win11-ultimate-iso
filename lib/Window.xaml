@@ -285,7 +285,7 @@
                 <ComboBoxItem Content="Best SSD - wipe only if there is one clear choice" Tag="BestSsd"/>
                 <ComboBoxItem Content="Disk 0 - always wipe disk 0" Tag="Disk0"/>
               </ComboBox></StackPanel>
-            <TextBlock Style="{StaticResource Hint}" Foreground="{StaticResource Danger}" Text="Best SSD prefers NVMe, then SSD, then HDD, never USB or disks under 64 GB, and gives you 10 seconds to cancel with Ctrl+C. If two disks tie, normal setup opens instead. Needs 'Skip edition choice'. Any PC booted from this ISO can be wiped."/>
+            <TextBlock Style="{StaticResource Hint}" Foreground="{StaticResource Danger}" Text="Best SSD prefers NVMe, then SSD, then HDD, never USB or disks under 64 GB, and shows a popup with 10 seconds to cancel. If two disks tie, normal setup opens and a popup says why. Needs 'Skip edition choice'. Any PC booted from this ISO can be wiped."/>
           </StackPanel></Border>
           <Border Style="{StaticResource Card}"><StackPanel>
             <TextBlock Text="ACCOUNT" Style="{StaticResource Section}"/>

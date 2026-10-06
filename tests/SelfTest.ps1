@@ -45,6 +45,7 @@ Assert ($s -notmatch 'WillWipeDisk') 'No disk wipe when AutoInstall Off'
 Assert ($s -match 'VK7JG-NPHTM-C97JM-9MPGT-3V66T') 'Edition Pro -> generic Pro key'
 Assert ($s -match 'HideOnlineAccountScreens' -and $s -match 'christitus') 'SkipOobe + WinUtil'
 Assert ($s -match '<ComputerName>\*</ComputerName>') 'Empty computer name -> random'
+Assert ($s -match 'International-Core-WinPE' -and $s -match '<SetupUILanguage><UILanguage>de-DE</UILanguage>') 'Setup language page skipped (windowsPE)'
 $u.AutoInstall = 'Disk0'; $u.SkipOobe = $false; $u.Edition = ''; $u.Password = ''
 $s = ([xml](New-UnattendXml $u)).OuterXml
 Assert ($s -match 'WillWipeDisk' -and $s -notmatch 'HideOnlineAccountScreens' -and $s -notmatch 'ProductKey') 'Disk0 wipe, OOBE shown, no key'

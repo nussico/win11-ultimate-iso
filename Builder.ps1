@@ -213,7 +213,7 @@ function Get-Config {
         Unattend = @{
             Enabled = [bool]$ui.UnattendOn.IsChecked; UserName = $ui.UserName.Text; Password = $ui.Password.Password
             AutoLogon = [bool]$ui.AutoLogon.IsChecked; Admin = [bool]$ui.AdminGroup.IsChecked; ComputerName = $ui.ComputerName.Text
-            TimeZone = [string]$ui.TimeZone.SelectedItem; Keyboard = [string]$ui.Keyboard.SelectedItem; Locale = [string]$ui.Locale.SelectedItem
+            Language = [string]$ui.BaseLang.SelectedItem; TimeZone = [string]$ui.TimeZone.SelectedItem; Keyboard = [string]$ui.Keyboard.SelectedItem; Locale = [string]$ui.Locale.SelectedItem
             SkipOobe = [bool]$ui.SkipOobe.IsChecked; Edition = $(if ($ui.SkipEdition.IsChecked) { [string]$ui.Edition.SelectedItem } else { '' })
             ProductKey = $ui.ProductKey.Text.Trim().ToUpper(); AutoInstall = [string]$ui.AutoInstall.SelectedItem.Tag
             RunWinUtil = [bool]$ui.RunWinUtil.IsChecked; CustomScript = $ui.CustomScript.Text; EnableAdmin = [bool]$ui.EnableAdmin.IsChecked

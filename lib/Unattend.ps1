@@ -79,13 +79,17 @@ function New-UnattendXml($u) {
             "<SynchronousCommand wcm:action=`"add`"><Order>$i</Order><CommandLine>$(& $esc $_)</CommandLine></SynchronousCommand>" }) -join '') + '</FirstLogonCommands>'
     }
 
+    # Windows language (= ISO language), keyboard and formats. Set in both passes, otherwise Setup's first
+    # page (windowsPE) and OOBE's region/keyboard pages still ask.
+    $lang = & $esc $(if ($u.Language) { $u.Language } else { $u.Locale })
     $intl = "<InputLocale>$(& $esc $u.Keyboard)</InputLocale><SystemLocale>$(& $esc $u.Locale)</SystemLocale>" +
-            "<UserLocale>$(& $esc $u.Locale)</UserLocale>"
+            "<UILanguage>$lang</UILanguage><UserLocale>$(& $esc $u.Locale)</UserLocale>"
+    $intlPe = "<SetupUILanguage><UILanguage>$lang</UILanguage></SetupUILanguage>$intl"
 
     @"
 <?xml version="1.0" encoding="utf-8"?>
 <unattend xmlns="urn:schemas-microsoft-com:unattend" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
-<settings pass="windowsPE">$(& $comp 'Microsoft-Windows-Setup' $pe)</settings>
+<settings pass="windowsPE">$(& $comp 'Microsoft-Windows-International-Core-WinPE' $intlPe)$(& $comp 'Microsoft-Windows-Setup' $pe)</settings>
 <settings pass="specialize">$(& $comp 'Microsoft-Windows-Shell-Setup' "<ComputerName>$cn</ComputerName>")</settings>
 <settings pass="oobeSystem">$(& $comp 'Microsoft-Windows-International-Core' $intl)$(& $comp 'Microsoft-Windows-Shell-Setup' (
     "$oobe<UserAccounts><LocalAccounts><LocalAccount wcm:action=`"add`"><Name>$user</Name><Group>$group</Group><Password>$pw</Password></LocalAccount></LocalAccounts></UserAccounts>" +
