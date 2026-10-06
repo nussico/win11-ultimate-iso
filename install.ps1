@@ -11,8 +11,10 @@
     $dir = Join-Path $drive.RootDirectory 'Win11UltimateBuilder'
     Write-Host "Win11 Ultimate ISO Builder -> $dir ($([math]::Round($drive.AvailableFreeSpace / 1GB)) GB free)" -ForegroundColor Cyan
 
+    # Pin the download to the newest commit so version.txt matches it (the builder compares it to offer updates).
+    $sha = try { (Invoke-RestMethod "https://api.github.com/repos/$repo/commits/main" -Headers @{ Accept = 'application/vnd.github.sha' }).Trim() } catch { 'main' }
     $zip = Join-Path $env:TEMP 'w11ub.zip'; $tmp = Join-Path $env:TEMP 'w11ub'
-    Invoke-WebRequest "https://github.com/$repo/archive/refs/heads/main.zip" -OutFile $zip -UseBasicParsing
+    Invoke-WebRequest "https://github.com/$repo/archive/$sha.zip" -OutFile $zip -UseBasicParsing
     if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
     Expand-Archive $zip $tmp
     # Unblock before copying: work\ in $dir can hold TrustedInstaller-owned leftovers that can't even be listed.
@@ -21,7 +23,14 @@
     # Overwrites program files only; your sources\, out\ and cache\ stay.
     Copy-Item "$((Get-ChildItem $tmp)[0].FullName)\*" $dir -Recurse -Force
     Remove-Item $zip, $tmp -Recurse -Force
+    if ($sha -ne 'main') { Set-Content "$dir\version.txt" $sha } else { Remove-Item "$dir\version.txt" -ErrorAction SilentlyContinue }
 
     # conhost --headless: the builder opens without an extra console window
-    Start-Process conhost.exe -Verb RunAs -ArgumentList "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File `"$dir\Builder.ps1`""
+    $launch = "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File `"$dir\Builder.ps1`""
+    # Shortcut inside the install folder only (nothing in Start menu or desktop), so the irm line is only needed once.
+    $s = (New-Object -ComObject WScript.Shell).CreateShortcut("$dir\Win11 Ultimate ISO Builder.lnk")
+    $s.TargetPath = "$env:SystemRoot\System32\conhost.exe"; $s.Arguments = $launch
+    $s.WorkingDirectory = $dir; $s.IconLocation = "$dir\lib\app.ico"; $s.Save()
+    Write-Host "Start it next time with: $dir\Win11 Ultimate ISO Builder" -ForegroundColor Cyan
+    Start-Process conhost.exe -Verb RunAs -ArgumentList $launch
 }

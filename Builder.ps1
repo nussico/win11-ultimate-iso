@@ -58,6 +58,20 @@ $ui.Build.Items.Add('Auto - newest build matching your ISO') | Out-Null
 foreach ($b in $buildList) { $ui.Build.Items.Add($b.title) | Out-Null }
 $ui.Build.SelectedIndex = 0
 
+# --- Updates: install.ps1 writes the installed commit to version.txt ---
+$repo = 'nussico/win11-ultimate-iso'
+try {
+    $have = (Get-Content "$root\version.txt" -ErrorAction Stop).Trim()
+    $latest = Invoke-RestMethod "https://api.github.com/repos/$repo/commits/main" -Headers @{ Accept = 'application/vnd.github.sha' } -TimeoutSec 5
+    if ($latest -and $latest.Trim() -ne $have) { $ui.UpdateBtn.Visibility = 'Visible' }
+} catch { }   # manual install, offline or rate-limited: no button
+$ui.UpdateBtn.Add_Click({
+        if ($script:job) { Show-Msg 'A build is running. Update when it is done.' | Out-Null; return }
+        if ((Show-Msg 'Download the newest builder and restart it? Your ISOs and output are kept.' 'Question' 'YesNo') -ne 'Yes') { return }
+        Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"Start-Sleep 2; irm https://raw.githubusercontent.com/$repo/main/install.ps1 | iex`""
+        $win.Close()
+    })
+
 # --- Source / languages ---
 $ui.IsoFolder.Text = "$root\sources"
 $ui.BrowseIso.Add_Click({ Select-Folder $ui.IsoFolder })
