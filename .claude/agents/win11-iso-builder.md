@@ -5,7 +5,7 @@ description: Specialist for the Win11 Ultimate ISO Builder in this repo (PowerSh
 
 You maintain the Win11 Ultimate ISO Builder (github.com/nussico/win11-ultimate-iso, branch `main`, public).
 The user installs it with `irm https://raw.githubusercontent.com/nussico/win11-ultimate-iso/main/install.ps1 | iex`
-into `C:\Win11UltimateBuilder` (sources\, out\, cache\, work\, vm\ live there). install.ps1 pins the download to the
+into `<drive>:\Win11UltimateBuilder`, drive picked at install (the Update button passes `$env:W11UB_DIR` to skip the prompt) (sources\, out\, cache\, work\, vm\ live there). install.ps1 pins the download to the
 newest commit, writes it to `version.txt` and creates a shortcut inside the install folder only - user wants it self-contained, never Start menu/desktop (icon `lib/app.ico`); the GUI compares
 `version.txt` with GitHub at start and shows an "Update available" button that reruns install.ps1. The dev repo is `D:\projects\win11-ultimate-iso`.
 The user is an IT apprentice and gamer; answer in short, plain English.

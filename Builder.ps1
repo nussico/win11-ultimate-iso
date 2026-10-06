@@ -68,6 +68,7 @@ try {
 $ui.UpdateBtn.Add_Click({
         if ($script:job) { Show-Msg 'A build is running. Update when it is done.' | Out-Null; return }
         if ((Show-Msg 'Download the newest builder and restart it? Your ISOs and output are kept.' 'Question' 'YesNo') -ne 'Yes') { return }
+        $env:W11UB_DIR = $root   # installer updates this folder instead of asking for a drive
         Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"Start-Sleep 2; irm https://raw.githubusercontent.com/$repo/main/install.ps1 | iex`""
         $win.Close()
     })

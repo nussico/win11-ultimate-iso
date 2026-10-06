@@ -5,11 +5,24 @@
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     $repo = 'nussico/win11-ultimate-iso'
 
-    # Builds need ~60 GB next to the builder: use the fixed drive with the most free space.
-    $drive = [IO.DriveInfo]::GetDrives() | Where-Object { $_.DriveType -eq 'Fixed' -and $_.IsReady } |
-        Sort-Object AvailableFreeSpace -Descending | Select-Object -First 1
-    $dir = Join-Path $drive.RootDirectory 'Win11UltimateBuilder'
-    Write-Host "Win11 Ultimate ISO Builder -> $dir ($([math]::Round($drive.AvailableFreeSpace / 1GB)) GB free)" -ForegroundColor Cyan
+    # Builds need ~60 GB next to the builder. The Update button passes its folder; otherwise ask which drive
+    # (Enter = the drive that already has the builder, else the one with the most free space).
+    $dir = $env:W11UB_DIR
+    if (-not $dir) {
+        $drives = @([IO.DriveInfo]::GetDrives() | Where-Object { $_.DriveType -eq 'Fixed' -and $_.IsReady } | Sort-Object AvailableFreeSpace -Descending)
+        $def = @($drives | Where-Object { Test-Path (Join-Path $_.RootDirectory 'Win11UltimateBuilder\Builder.ps1') }) + $drives | Select-Object -First 1
+        Write-Host 'Win11 Ultimate ISO Builder - pick the drive to install to (builds need about 60 GB free):' -ForegroundColor Cyan
+        for ($i = 0; $i -lt $drives.Count; $i++) {
+            $d = $drives[$i]; $note = ''
+            if (Test-Path (Join-Path $d.RootDirectory 'Win11UltimateBuilder\Builder.ps1')) { $note += '  (installed here)' }
+            if ($d.AvailableFreeSpace -lt 60GB) { $note += '  (not enough space)' }
+            Write-Host ('  [{0}] {1}  {2} GB free{3}' -f ($i + 1), $d.Name, [math]::Round($d.AvailableFreeSpace / 1GB), $note)
+        }
+        do { $pick = Read-Host "Number, or Enter for $($def.Name)" } until (-not $pick -or ($pick -match '^\d+$' -and [int]$pick -ge 1 -and [int]$pick -le $drives.Count))
+        $drive = if ($pick) { $drives[[int]$pick - 1] } else { $def }
+        $dir = Join-Path $drive.RootDirectory 'Win11UltimateBuilder'
+    }
+    Write-Host "Installing to $dir" -ForegroundColor Cyan
 
     # Pin the download to the newest commit so version.txt matches it (the builder compares it to offer updates).
     $sha = try { (Invoke-RestMethod "https://api.github.com/repos/$repo/commits/main" -Headers @{ Accept = 'application/vnd.github.sha' }).Trim() } catch { 'main' }
