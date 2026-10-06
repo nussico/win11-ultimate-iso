@@ -262,7 +262,7 @@
         <Border Style="{StaticResource Card}"><StackPanel>
           <TextBlock Text="DRIVER FOLDER" Style="{StaticResource Section}"/>
           <DockPanel><Button x:Name="BrowseDrivers" DockPanel.Dock="Right" Content="Browse"/><TextBox x:Name="DriversPath"/></DockPanel>
-          <TextBlock Style="{StaticResource Hint}" Text="Used when 'Add drivers from folder' is on. Newer builds may ignore BypassNRO - the unattended local account is the reliable route."/>
+          <TextBlock Style="{StaticResource Hint}" Text="Used when 'Add drivers from folder' is on."/>
         </StackPanel></Border>
       </StackPanel></ScrollViewer>
 

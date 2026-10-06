@@ -13,6 +13,14 @@ function ConvertTo-UnattendPassword($Pw, $Suffix) {
     [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("$Pw$Suffix"))
 }
 
+# Local-account patch without unattended setup: newer builds ignore BypassNRO, so hide only the
+# Microsoft account screens. Setup stays interactive and OOBE asks for a local user instead.
+function New-LocalAccountXml {
+    '<?xml version="1.0" encoding="utf-8"?><unattend xmlns="urn:schemas-microsoft-com:unattend"><settings pass="oobeSystem">' +
+    '<component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">' +
+    '<OOBE><HideOnlineAccountScreens>true</HideOnlineAccountScreens></OOBE></component></settings></unattend>'
+}
+
 function New-UnattendXml($u) {
     $esc = { param($s) [Security.SecurityElement]::Escape([string]$s) }
     $comp = { param($name, $body) "<component name=`"$name`" processorArchitecture=`"amd64`" publicKeyToken=`"31bf3856ad364e35`" language=`"neutral`" versionScope=`"nonSxS`">$body</component>" }

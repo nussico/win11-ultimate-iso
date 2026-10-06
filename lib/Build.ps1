@@ -207,6 +207,10 @@ function Invoke-Build($Cfg, $Sync) {
             }
             Write-Log 'autounattend.xml written'
         }
+        elseif ('localaccount' -in $Cfg.Patches) {
+            [IO.File]::WriteAllText("$w\iso\autounattend.xml", (New-LocalAccountXml))
+            Write-Log 'autounattend.xml written (only hides Microsoft account screens)'
+        }
 
         Enter-Step 7 'Compress'
         foreach ($img in $images) {

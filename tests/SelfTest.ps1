@@ -54,6 +54,8 @@ Assert ($s -match 'AAAAA-BBBBB' -and $s -notmatch 'VK7JG') 'Own product key over
 $u.AutoInstall = 'BestSsd'
 $s = ([xml](New-UnattendXml $u)).OuterXml
 Assert ($s -match 'autoinstall.ps1' -and $s -notmatch 'WillWipeDisk') 'BestSsd runs script, no fixed-disk wipe'
+$s = ([xml](New-LocalAccountXml)).OuterXml
+Assert ($s -match 'HideOnlineAccountScreens>true' -and $s -notmatch 'windowsPE|LocalAccounts') 'Local-account-only XML: hides MS account, setup stays interactive'
 
 # Disk picking (autoinstall.ps1)
 . "$root\lib\autoinstall.ps1"

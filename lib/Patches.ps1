@@ -34,7 +34,7 @@ $Patches = [ordered]@{
             'SYSTEM\Setup\LabConfig|BypassRAMCheck|1', 'SYSTEM\Setup\LabConfig|BypassCPUCheck|1',
             'SYSTEM\Setup\LabConfig|BypassStorageCheck|1', 'SYSTEM\Setup\MoSetup|AllowUpgradesWithUnsupportedTPMOrCPU|1') }
     localaccount = @{ Group = 'Setup bypasses'; Label = 'Local account (BypassNRO)'
-        Desc = 'Setup works without internet and without a Microsoft account.'; Reg = @(
+        Desc = 'Setup works without internet and without a Microsoft account. You create a local user during setup.'; Reg = @(
             'SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE|BypassNRO|1') }
     skipprivacy  = @{ Group = 'Setup bypasses'; Label = 'Skip privacy screens'
         Desc = 'Skips the privacy settings questions (location, ads ID, diagnostics) during setup.'; Reg = @(

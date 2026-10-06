@@ -15,7 +15,7 @@ try {
     else { $wim = Get-InstallImage $drive }
     Check (Test-Path "$drive\boot\etfsboot.com") 'BIOS boot file present'
     Check (Test-Path "$drive\efi\microsoft\boot\efisys.bin") 'UEFI boot file present'
-    if ($cfg.Unattend.Enabled) {
+    if ($cfg.Unattend.Enabled -or 'localaccount' -in $cfg.Patches) {
         $ok = $true; try { [xml](Get-Content "$drive\autounattend.xml" -Raw) | Out-Null } catch { $ok = $false }
         Check $ok 'autounattend.xml is valid XML'
     }
