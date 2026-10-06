@@ -207,7 +207,6 @@
         </StackPanel>
         <ListBox x:Name="Nav" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource Nav}">
           <ListBoxItem Content="Source" Tag="PageSource" IsSelected="True"/>
-          <ListBoxItem Content="Editions" Tag="PageEditions"/>
           <ListBoxItem Content="Patches" Tag="PagePatches"/>
           <ListBoxItem Content="Unattended" Tag="PageUnattended"/>
           <ListBoxItem Content="Build" Tag="PageBuild"/>
@@ -226,6 +225,11 @@
           <TextBlock Style="{StaticResource Hint}" Text="The ISO is built in this one language: setup and Windows. Keyboard and formats can be set on the Unattended page."/>
         </StackPanel></Border>
         <Border Style="{StaticResource Card}"><StackPanel>
+          <TextBlock Text="EDITIONS" Style="{StaticResource Section}"/>
+          <WrapPanel x:Name="EditionPanel"/>
+          <TextBlock Style="{StaticResource Hint}" Text="Editions found in your ISO for this language. Ones marked UUP are built via UUP dump."/>
+        </StackPanel></Border>
+        <Border Style="{StaticResource Card}"><StackPanel>
           <TextBlock Text="YOUR ISOS" Style="{StaticResource Section}"/>
           <DockPanel>
             <Button x:Name="ScanIsos" DockPanel.Dock="Right" Content="Scan"/>
@@ -242,13 +246,6 @@
           <StackPanel Style="{StaticResource Row}"><TextBlock Text="Build" Style="{StaticResource Label}"/><ComboBox x:Name="Build" Width="380"/></StackPanel>
           <TextBlock Style="{StaticResource Hint}" Text="Auto picks the newest build matching your ISO."/>
         </StackPanel></Border>
-      </StackPanel></ScrollViewer>
-
-      <!-- Editions -->
-      <ScrollViewer x:Name="PageEditions" Style="{StaticResource Page}" Visibility="Collapsed" VerticalScrollBarVisibility="Auto"><StackPanel Margin="36,30,36,30">
-        <TextBlock Text="Editions" Style="{StaticResource H1}"/>
-        <TextBlock Text="Editions found in your ISO for the base language. Ones marked UUP are built via UUP dump." Style="{StaticResource Sub}"/>
-        <Border Style="{StaticResource Card}"><WrapPanel x:Name="EditionPanel"/></Border>
       </StackPanel></ScrollViewer>
 
       <!-- Patches -->
