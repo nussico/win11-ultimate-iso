@@ -28,9 +28,14 @@ Manual: download the repo ZIP, extract, right-click `Builder.ps1` -> *Run with P
 - **Language**: one language per ISO (setup and Windows); more can be added later in Windows Settings.
 - **Presets**: Basic, Recommended, CTT, Extreme, or tick everything yourself.
 - **Patches**
-  - Setup bypasses: TPM / Secure Boot / RAM / CPU checks, local account, skip privacy screens, no auto-BitLocker
-  - Debloat: preinstalled apps, telemetry, ads/tips/Copilot, OneDrive. Essential apps (Store, winget, Calculator, Photos, Xbox login, Game Bar...) are protected
-  - Tweaks: classic right-click menu, taskbar on the left, file extensions, End task, no Bing in Start search, no widgets
+  - Setup: TPM / Secure Boot / RAM / CPU checks, local account, skip privacy screens, no auto-BitLocker
+  - Apps: preinstalled bloat, Xbox app, OneDrive. Essential apps (Store, winget, Calculator, Photos, Xbox login, Game Bar...) are protected
+  - Privacy: telemetry, ads/tips/Copilot, activity history, advertising ID, error reporting, Bing in Start, typing data, tailored experiences
+  - Taskbar & Start: icons on the left, End task, hide search box / Task View / widgets, more Start pins, clock seconds
+  - Explorer: classic right-click menu, file extensions, hidden files, open This PC, compact view, hide Gallery
+  - System: dark mode, no Fast Startup, no hibernation, long paths, services to manual (CTT)
+  - Updates: no P2P sharing, no driver updates, no automatic restart
+  - Gaming: no background recording, GPU scheduling, no power throttling, game priority, no mouse acceleration, no Sticky Keys popup
   - Aggressive: remove Edge (keeps WebView2), disable Defender, disable Recall
   - Extras: inject drivers, CTT WinUtil shortcut
 - **Unattended**: local account (default `User`), timezone, keyboard, skip OOBE, product key, run WinUtil or your own script after first login.
@@ -49,8 +54,8 @@ The first build installs the Windows ADK *Deployment Tools* via winget.
 | Preset | Patches |
 |---|---|
 | Basic | setup bypasses |
-| Recommended | + debloat (keeps the Xbox app), file extensions, End task, no Bing |
-| CTT | + all tweaks, WinUtil shortcut; unattended: skip OOBE, run WinUtil |
+| Recommended | + bloat apps and OneDrive (keeps the Xbox app), privacy, file extensions, End task, no auto-restart, no background recording |
+| CTT | + CTT's UI tweaks, services to manual, WinUtil shortcut; unattended: skip OOBE, run WinUtil |
 | Extreme | everything incl. Edge / Defender / Recall and the Xbox app |
 
 ## Testing a build

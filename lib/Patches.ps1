@@ -1,6 +1,6 @@
 # Patch catalog, app lists and presets.
-# Reg entries: 'HIVE\Key|Name|Value'  (HIVE = SYSTEM, SOFTWARE or DEFAULT; DWORD values; Value '-' deletes the value;
-#   Name '@' with no value = empty default value)
+# Reg entries: 'HIVE\Key|Name|Value'  (HIVE = SYSTEM, SOFTWARE or DEFAULT; DWORD values; 'sz:text' = string value;
+#   Value '-' deletes the value; Name '@' with no value = empty default value)
 
 $RemoveApps = @(
     'Clipchamp.Clipchamp', 'Microsoft.BingNews', 'Microsoft.BingWeather', 'Microsoft.Getstarted',
@@ -28,100 +28,139 @@ $CdmOff = 'ContentDeliveryAllowed', 'SilentInstalledAppsEnabled', 'SystemPaneSug
     ForEach-Object { "DEFAULT\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager|$_|0" }
 
 $Patches = [ordered]@{
-    hwchecks     = @{ Group = 'Setup bypasses'; Label = 'Skip TPM/CPU/RAM checks'; Boot = $true
+    hwchecks     = @{ Group = 'Setup'; Label = 'Skip TPM/CPU/RAM checks'; Boot = $true
         Desc = 'Installs on PCs without TPM 2.0, Secure Boot, 4 GB RAM or a supported CPU.'; Reg = @(
             'SYSTEM\Setup\LabConfig|BypassTPMCheck|1', 'SYSTEM\Setup\LabConfig|BypassSecureBootCheck|1',
             'SYSTEM\Setup\LabConfig|BypassRAMCheck|1', 'SYSTEM\Setup\LabConfig|BypassCPUCheck|1',
             'SYSTEM\Setup\LabConfig|BypassStorageCheck|1', 'SYSTEM\Setup\MoSetup|AllowUpgradesWithUnsupportedTPMOrCPU|1') }
-    localaccount = @{ Group = 'Setup bypasses'; Label = 'Local account (BypassNRO)'
+    localaccount = @{ Group = 'Setup'; Label = 'Local account (BypassNRO)'
         Desc = 'Setup works without internet and without a Microsoft account. You create a local user during setup.'; Reg = @(
             'SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE|BypassNRO|1') }
-    skipprivacy  = @{ Group = 'Setup bypasses'; Label = 'Skip privacy screens'
+    skipprivacy  = @{ Group = 'Setup'; Label = 'Skip privacy screens'
         Desc = 'Skips the privacy settings questions (location, ads ID, diagnostics) during setup.'; Reg = @(
             'SOFTWARE\Policies\Microsoft\Windows\OOBE|DisablePrivacyExperience|1') }
-    nobitlocker  = @{ Group = 'Setup bypasses'; Label = 'No automatic BitLocker'
+    nobitlocker  = @{ Group = 'Setup'; Label = 'No automatic BitLocker'
         Desc = 'Windows does not encrypt the drive on its own. You can still turn BitLocker on later.'; Reg = @(
             'SYSTEM\ControlSet001\Control\BitLocker|PreventDeviceEncryption|1') }
 
-    bloatapps    = @{ Group = 'Debloat'; Label = 'Remove bloat apps'
+    bloatapps    = @{ Group = 'Apps'; Label = 'Remove bloat apps'
         Desc = 'Removes: ' + (($RemoveApps | ForEach-Object { $_.Split('.')[-1] }) -join ', ') + '. Store, Calculator, Photos, Xbox login and Game Bar are always kept.'
         Action = { param($m, $c) Remove-Apps $m $RemoveApps } }
-    xboxapp      = @{ Group = 'Debloat'; Label = 'Remove Xbox app'
+    xboxapp      = @{ Group = 'Apps'; Label = 'Remove Xbox app'
         Desc = 'Removes only the Xbox app. Xbox login and Game Bar stay, so games keep working.'
         Action = { param($m, $c) Remove-Apps $m @('Microsoft.GamingApp') } }
-    telemetry    = @{ Group = 'Debloat'; Label = 'Disable telemetry'
+    onedrive     = @{ Group = 'Apps'; Label = 'Remove OneDrive'
+        Desc = 'OneDrive is not installed for new users. You can still get it from the Store later.'; Reg = @(
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Run|OneDriveSetup|-')
+        Action = { param($m, $c) Remove-ImagePath "$m\Windows\System32\OneDriveSetup.exe" } }
+
+    telemetry    = @{ Group = 'Privacy'; Label = 'Disable telemetry'
         Desc = 'Turns off diagnostic data and the tracking services (DiagTrack, WAP push).'; Reg = @(
             'SOFTWARE\Policies\Microsoft\Windows\DataCollection|AllowTelemetry|0',
             'SYSTEM\ControlSet001\Services\DiagTrack|Start|4', 'SYSTEM\ControlSet001\Services\dmwappushservice|Start|4') }
-    adscopilot   = @{ Group = 'Debloat'; Label = 'Disable ads, tips and Copilot'
+    adscopilot   = @{ Group = 'Privacy'; Label = 'Disable ads, tips and Copilot'
         Desc = 'Turns off Copilot, Start menu recommendations, suggested apps, tips, silently installed apps and the "Let''s finish setting up" nag.'; Reg = @(
             'DEFAULT\Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement|ScoobeSystemSettingEnabled|0',
             'SOFTWARE\Policies\Microsoft\Windows\CloudContent|DisableWindowsConsumerFeatures|1',
             'SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot|TurnOffWindowsCopilot|1',
             'DEFAULT\Software\Policies\Microsoft\Windows\WindowsCopilot|TurnOffWindowsCopilot|1',
             'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|Start_IrisRecommendations|0') + $CdmOff }
-    onedrive     = @{ Group = 'Debloat'; Label = 'Remove OneDrive'
-        Desc = 'OneDrive is not installed for new users. You can still get it from the Store later.'; Reg = @(
-            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Run|OneDriveSetup|-')
-        Action = { param($m, $c) Remove-ImagePath "$m\Windows\System32\OneDriveSetup.exe" } }
-    activity     = @{ Group = 'Debloat'; Label = 'Disable activity history'
+    activity     = @{ Group = 'Privacy'; Label = 'Disable activity history'
         Desc = 'Windows stops recording which apps and files you used and does not upload that history.'; Reg = @(
             'EnableActivityFeed', 'PublishUserActivities', 'UploadUserActivities' |
             ForEach-Object { "SOFTWARE\Policies\Microsoft\Windows\System|$_|0" }) }
-    adid         = @{ Group = 'Debloat'; Label = 'Disable advertising ID'
+    adid         = @{ Group = 'Privacy'; Label = 'Disable advertising ID'
         Desc = 'Apps cannot use an advertising ID to show you personalized ads.'; Reg = @(
             'SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo|DisabledByGroupPolicy|1') }
-    nop2p        = @{ Group = 'Debloat'; Label = 'No update sharing (P2P)'
-        Desc = 'Windows Update downloads only from Microsoft and does not upload updates to other PCs.'; Reg = @(
-            'SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization|DODownloadMode|0') }
-    noerrorrep   = @{ Group = 'Debloat'; Label = 'Disable error reporting'
+    noerrorrep   = @{ Group = 'Privacy'; Label = 'Disable error reporting'
         Desc = 'Crash reports are no longer sent to Microsoft.'; Reg = @(
             'SOFTWARE\Policies\Microsoft\Windows\Windows Error Reporting|Disabled|1') }
+    nobing       = @{ Group = 'Privacy'; Label = 'No Bing in Start search'
+        Desc = 'Start menu search only finds apps, files and settings on your PC, no web results.'; Reg = @(
+            'DEFAULT\Software\Policies\Microsoft\Windows\Explorer|DisableSearchBoxSuggestions|1') }
+    notyping     = @{ Group = 'Privacy'; Label = 'Disable typing/inking data'
+        Desc = 'Windows stops collecting what you type and write to "improve" suggestions and does not harvest your contacts.'; Reg = @(
+            'SOFTWARE\Policies\Microsoft\InputPersonalization|AllowInputPersonalization|0',
+            'DEFAULT\Software\Microsoft\InputPersonalization|RestrictImplicitInkCollection|1',
+            'DEFAULT\Software\Microsoft\InputPersonalization|RestrictImplicitTextCollection|1',
+            'DEFAULT\Software\Microsoft\InputPersonalization\TrainedDataStore|HarvestContacts|0') }
+    notailored   = @{ Group = 'Privacy'; Label = 'Disable tailored experiences'
+        Desc = 'Microsoft no longer uses your diagnostic data for personalized tips, ads and recommendations.'; Reg = @(
+            'DEFAULT\Software\Policies\Microsoft\Windows\CloudContent|DisableTailoredExperiencesWithDiagnosticData|1',
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Privacy|TailoredExperiencesWithDiagnosticDataEnabled|0') }
+
+    taskbarleft  = @{ Group = 'Taskbar & Start'; Label = 'Taskbar icons on the left'
+        Desc = 'Start button and taskbar icons on the left like Windows 10, instead of centered.'; Reg = @(
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|TaskbarAl|0') }
+    endtask      = @{ Group = 'Taskbar & Start'; Label = '"End task" in taskbar menu'
+        Desc = 'Right-click a frozen app on the taskbar and choose End task, no Task Manager needed.'; Reg = @(
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\TaskbarDeveloperSettings|TaskbarEndTask|1') }
+    nosearchbox  = @{ Group = 'Taskbar & Start'; Label = 'Hide taskbar search box'
+        Desc = 'Removes the search box from the taskbar. Press Start and type to search as usual.'; Reg = @(
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Search|SearchboxTaskbarMode|0') }
+    notaskview   = @{ Group = 'Taskbar & Start'; Label = 'Hide Task View button'
+        Desc = 'Removes the Task View button from the taskbar. Win+Tab still works.'; Reg = @(
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|ShowTaskViewButton|0') }
+    nowidgets    = @{ Group = 'Taskbar & Start'; Label = 'Disable widgets'
+        Desc = 'Removes the news and weather widgets board from the taskbar.'; Reg = @(
+            'SOFTWARE\Policies\Microsoft\Dsh|AllowNewsAndInterests|0') }
+    startpins    = @{ Group = 'Taskbar & Start'; Label = 'More pins in Start'
+        Desc = 'Start menu shows an extra row of pinned apps and fewer recommendations.'; Reg = @(
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|Start_Layout|1') }
+    clockseconds = @{ Group = 'Taskbar & Start'; Label = 'Seconds in the taskbar clock'
+        Desc = 'The clock shows seconds, e.g. 14:05:37. Uses a tiny bit more power on laptops.'; Reg = @(
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|ShowSecondsInSystemClock|1') }
+
+    classicmenu  = @{ Group = 'Explorer'; Label = 'Classic right-click menu'
+        Desc = 'The full Windows 10 style context menu, without clicking "Show more options".'; Reg = @(
+            'DEFAULT\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32|@|') }
+    fileext      = @{ Group = 'Explorer'; Label = 'Show file extensions'
+        Desc = 'Shows .exe, .pdf, .jpg and so on in Explorer. Makes fake files like "photo.jpg.exe" easy to spot.'; Reg = @(
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|HideFileExt|0') }
+    hiddenfiles  = @{ Group = 'Explorer'; Label = 'Show hidden files'
+        Desc = 'Explorer shows hidden files and folders like AppData.'; Reg = @(
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|Hidden|1') }
+    thispc       = @{ Group = 'Explorer'; Label = 'Explorer opens "This PC"'
+        Desc = 'Explorer starts on your drives instead of Home.'; Reg = @(
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|LaunchTo|1') }
+    compactview  = @{ Group = 'Explorer'; Label = 'Compact view'
+        Desc = 'Less space between files and folders, like Windows 10. More fits on the screen.'; Reg = @(
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|UseCompactMode|1') }
+    nogallery    = @{ Group = 'Explorer'; Label = 'Hide Gallery'
+        Desc = 'Removes the Gallery entry from the Explorer sidebar. Your pictures stay in the Pictures folder.'; Reg = @(
+            'DEFAULT\Software\Classes\CLSID\{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}|System.IsPinnedToNameSpaceTree|0') }
+
+    darkmode     = @{ Group = 'System'; Label = 'Dark mode'
+        Desc = 'Windows and apps use the dark theme from the first login.'; Reg = @(
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize|AppsUseLightTheme|0',
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize|SystemUsesLightTheme|0') }
+    nofaststart  = @{ Group = 'System'; Label = 'Disable Fast Startup'
+        Desc = 'Shut down really shuts down. Fixes driver glitches and dual-boot problems; boot is a few seconds slower.'; Reg = @(
+            'SYSTEM\ControlSet001\Control\Session Manager\Power|HiberbootEnabled|0') }
+    nohibernate  = @{ Group = 'System'; Label = 'Disable hibernation'
+        Desc = 'No hiberfil.sys, which frees several GB on the system drive. Also turns off Fast Startup. Sleep still works.'; Reg = @(
+            'SYSTEM\ControlSet001\Control\Power|HibernateEnabled|0',
+            'SYSTEM\ControlSet001\Control\Power|HibernateEnabledDefault|0') }
+    longpaths    = @{ Group = 'System'; Label = 'Allow long file paths'
+        Desc = 'Removes the old 260 character limit for file paths. Helps with deep folders, games mods and dev tools.'; Reg = @(
+            'SYSTEM\ControlSet001\Control\FileSystem|LongPathsEnabled|1') }
     # Same as CTT WinUtil "Services - Set to Manual". CTT sets the svchost threshold to the PC's RAM;
     # the RAM isn't known offline, so the max value gives the same result on any PC (services stay grouped).
-    services     = @{ Group = 'Debloat'; Label = 'Services to manual (CTT)'
+    services     = @{ Group = 'System'; Label = 'Services to manual (CTT)'
         Desc = 'Like CTT WinUtil: Maps and Storage Service start only when needed; Offline Files, telemetry and Internet Connection Sharing are off; fewer svchost processes. Mobile hotspot stops working.'; Reg = @(
             'MapsBroker', 'StorSvc' | ForEach-Object { "SYSTEM\ControlSet001\Services\$_|Start|3" }) + @(
             'CscService', 'DiagTrack', 'SharedAccess' | ForEach-Object { "SYSTEM\ControlSet001\Services\$_|Start|4" }) + @(
             'SYSTEM\ControlSet001\Control|SvcHostSplitThresholdInKB|4294967295') }
 
-    classicmenu  = @{ Group = 'Tweaks'; Label = 'Classic right-click menu'
-        Desc = 'The full Windows 10 style context menu, without clicking "Show more options".'; Reg = @(
-            'DEFAULT\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32|@|') }
-    taskbarleft  = @{ Group = 'Tweaks'; Label = 'Taskbar icons on the left'
-        Desc = 'Start button and taskbar icons on the left like Windows 10, instead of centered.'; Reg = @(
-            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|TaskbarAl|0') }
-    fileext      = @{ Group = 'Tweaks'; Label = 'Show file extensions'
-        Desc = 'Shows .exe, .pdf, .jpg and so on in Explorer. Makes fake files like "photo.jpg.exe" easy to spot.'; Reg = @(
-            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|HideFileExt|0') }
-    endtask      = @{ Group = 'Tweaks'; Label = '"End task" in taskbar menu'
-        Desc = 'Right-click a frozen app on the taskbar and choose End task, no Task Manager needed.'; Reg = @(
-            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\TaskbarDeveloperSettings|TaskbarEndTask|1') }
-    nobing       = @{ Group = 'Tweaks'; Label = 'No Bing in Start search'
-        Desc = 'Start menu search only finds apps, files and settings on your PC, no web results.'; Reg = @(
-            'DEFAULT\Software\Policies\Microsoft\Windows\Explorer|DisableSearchBoxSuggestions|1') }
-    nowidgets    = @{ Group = 'Tweaks'; Label = 'Disable widgets'
-        Desc = 'Removes the news and weather widgets board from the taskbar.'; Reg = @(
-            'SOFTWARE\Policies\Microsoft\Dsh|AllowNewsAndInterests|0') }
-    darkmode     = @{ Group = 'Tweaks'; Label = 'Dark mode'
-        Desc = 'Windows and apps use the dark theme from the first login.'; Reg = @(
-            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize|AppsUseLightTheme|0',
-            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize|SystemUsesLightTheme|0') }
-    hiddenfiles  = @{ Group = 'Tweaks'; Label = 'Show hidden files'
-        Desc = 'Explorer shows hidden files and folders like AppData.'; Reg = @(
-            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|Hidden|1') }
-    thispc       = @{ Group = 'Tweaks'; Label = 'Explorer opens "This PC"'
-        Desc = 'Explorer starts on your drives instead of Home.'; Reg = @(
-            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|LaunchTo|1') }
-    nosearchbox  = @{ Group = 'Tweaks'; Label = 'Hide taskbar search box'
-        Desc = 'Removes the search box from the taskbar. Press Start and type to search as usual.'; Reg = @(
-            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Search|SearchboxTaskbarMode|0') }
-    notaskview   = @{ Group = 'Tweaks'; Label = 'Hide Task View button'
-        Desc = 'Removes the Task View button from the taskbar. Win+Tab still works.'; Reg = @(
-            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|ShowTaskViewButton|0') }
-    nofaststart  = @{ Group = 'Tweaks'; Label = 'Disable Fast Startup'
-        Desc = 'Shut down really shuts down. Fixes driver glitches and dual-boot problems; boot is a few seconds slower.'; Reg = @(
-            'SYSTEM\ControlSet001\Control\Session Manager\Power|HiberbootEnabled|0') }
+    nop2p        = @{ Group = 'Updates'; Label = 'No update sharing (P2P)'
+        Desc = 'Windows Update downloads only from Microsoft and does not upload updates to other PCs.'; Reg = @(
+            'SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization|DODownloadMode|0') }
+    nodriverupdates = @{ Group = 'Updates'; Label = 'No driver updates'
+        Desc = 'Windows Update no longer replaces your drivers, e.g. a newer GPU driver from NVIDIA or AMD. Install drivers yourself.'; Reg = @(
+            'SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate|ExcludeWUDriversInQualityUpdate|1') }
+    noautoreboot = @{ Group = 'Updates'; Label = 'No automatic restart'
+        Desc = 'Windows does not restart by itself for updates while you are logged in, e.g. during a game or download.'; Reg = @(
+            'SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU|NoAutoRebootWithLoggedOnUsers|1') }
 
     gamedvr      = @{ Group = 'Gaming'; Label = 'Disable background recording'
         Desc = 'Stops Game DVR from recording gameplay in the background (saves FPS). Game Bar itself stays.'; Reg = @(
@@ -137,6 +176,12 @@ $Patches = [ordered]@{
         Desc = 'Removes network throttling for media apps and gives games more CPU time.'; Reg = @(
             'SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile|NetworkThrottlingIndex|4294967295',
             'SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile|SystemResponsiveness|10') }
+    mouseaccel   = @{ Group = 'Gaming'; Label = 'Disable mouse acceleration'
+        Desc = 'Turns off "Enhance pointer precision": the cursor moves exactly as far as your mouse, better for aiming.'; Reg = @(
+            'MouseSpeed', 'MouseThreshold1', 'MouseThreshold2' | ForEach-Object { "DEFAULT\Control Panel\Mouse|$_|sz:0" }) }
+    stickykeys   = @{ Group = 'Gaming'; Label = 'No Sticky Keys popup'
+        Desc = 'Pressing Shift five times in a game no longer opens the Sticky Keys question.'; Reg = @(
+            'DEFAULT\Control Panel\Accessibility\StickyKeys|Flags|sz:506') }
 
     edge         = @{ Group = 'Aggressive'; Label = 'Remove Edge (keeps WebView2)'
         Desc = 'Deletes Microsoft Edge. WebView2 stays so apps keep working. You need another browser; Windows Update may bring Edge back.'; Reg = @(
@@ -169,11 +214,12 @@ $Patches = [ordered]@{
             $s.Save() } }
 }
 
-$Tweaks = @($Patches.Keys | Where-Object { $Patches[$_].Group -eq 'Tweaks' })
+# The UI tweaks CTT WinUtil applies (formerly the whole 'Tweaks' group).
+$CttTweaks = 'classicmenu', 'taskbarleft', 'fileext', 'endtask', 'nobing', 'nowidgets', 'darkmode', 'hiddenfiles', 'thispc', 'nosearchbox', 'notaskview', 'nofaststart'
 $Presets = [ordered]@{
     Basic       = @{ Patches = 'hwchecks', 'localaccount', 'skipprivacy', 'nobitlocker' }
-    Recommended = @{ Patches = @('hwchecks', 'localaccount', 'skipprivacy', 'nobitlocker', 'bloatapps', 'telemetry', 'adscopilot', 'onedrive', 'activity', 'adid', 'nop2p', 'fileext', 'endtask', 'nobing', 'gamedvr') }
-    CTT         = @{ Patches = @('hwchecks', 'localaccount', 'skipprivacy', 'nobitlocker', 'bloatapps', 'telemetry', 'adscopilot', 'onedrive', 'services', 'winutil') + $Tweaks
+    Recommended = @{ Patches = @('hwchecks', 'localaccount', 'skipprivacy', 'nobitlocker', 'bloatapps', 'telemetry', 'adscopilot', 'onedrive', 'activity', 'adid', 'nop2p', 'fileext', 'endtask', 'nobing', 'gamedvr', 'notyping', 'notailored', 'noautoreboot') }
+    CTT         = @{ Patches = @('hwchecks', 'localaccount', 'skipprivacy', 'nobitlocker', 'bloatapps', 'telemetry', 'adscopilot', 'onedrive', 'services', 'winutil') + $CttTweaks
         Unattend = @{ Enabled = $true; SkipOobe = $true; RunWinUtil = $true } }
     Extreme     = @{ Patches = @($Patches.Keys | Where-Object { $_ -ne 'drivers' })
         Unattend = @{ Enabled = $true; SkipOobe = $true; RunWinUtil = $true } }
@@ -243,7 +289,10 @@ function Set-OfflineReg([string[]]$Entries) {
         $key = Convert-RegPath $path
         if ($value -eq '-') { reg delete $key /v $name /f 2>&1 | Out-Null; Write-Log "  reg delete $path\$name" }
         elseif ($name -eq '@') { reg add $key /ve /f 2>&1 | Out-Null; if ($LASTEXITCODE) { throw "reg add failed: $e" }; Write-Log "  reg $path\(Default) = (empty)" }   # empty default value
-        else { reg add $key /v $name /t REG_DWORD /d $value /f 2>&1 | Out-Null; if ($LASTEXITCODE) { throw "reg add failed: $e" }; Write-Log "  reg $path\$name = $value" }
+        else {
+            $type, $data = if ($value -like 'sz:*') { 'REG_SZ', $value.Substring(3) } else { 'REG_DWORD', $value }
+            reg add $key /v $name /t $type /d $data /f 2>&1 | Out-Null; if ($LASTEXITCODE) { throw "reg add failed: $e" }; Write-Log "  reg $path\$name = $value"
+        }
         if ($script:Report) { $script:Report.Reg++ }
     }
 }

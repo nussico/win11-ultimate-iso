@@ -23,7 +23,7 @@ The user is an IT apprentice and gamer; answer in short, plain English.
 - One language per ISO (user's decision; language packs were removed). Don't re-add multi-language unless asked.
 - No license-circumvention tools (MASSGRAVE etc.) - only the user's own product key.
 - Never write secrets: config.json blanks password and product key.
-- Every patch needs a `Desc`. Reg entry format `'HIVE\Key|Name|Value'` (DWORD; `-` deletes; `Name '@'` with no value = empty default).
+- Every patch needs a `Desc`. Reg entry format `'HIVE\Key|Name|Value'` (DWORD; `sz:text` = REG_SZ; `-` deletes; `Name '@'` with no value = empty default). Groups (display order = catalog order): Setup, Apps, Privacy, Taskbar & Start, Explorer, System, Updates, Gaming, Aggressive, Extras. The CTT preset uses `$CttTweaks`.
 
 ## Known pitfalls (all bitten before)
 - PS 5.1: native stderr with `2>&1` under `$ErrorActionPreference='Stop'` throws. Use function-local `'Continue'` and check `$LASTEXITCODE`.

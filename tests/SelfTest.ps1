@@ -22,7 +22,7 @@ Assert (($r -join ',') -eq 'Clipchamp.Clipchamp') 'Get-AppsToRemove skips protec
 
 # Registry
 Assert ((Convert-RegPath 'SYSTEM\Setup\LabConfig') -eq 'HKLM\WIM_SYSTEM\Setup\LabConfig') 'Convert-RegPath'
-Assert (-not ($Patches.Values.Reg | Where-Object { $_ -and $_ -notmatch '^(SYSTEM|SOFTWARE|DEFAULT)\\[^|]+\|([^|@][^|]*\|(\d+|-)|@\|)$' })) 'All reg entries well-formed'
+Assert (-not ($Patches.Values.Reg | Where-Object { $_ -and $_ -notmatch '^(SYSTEM|SOFTWARE|DEFAULT)\\[^|]+\|([^|@][^|]*\|(\d+|-|sz:[^|]*)|@\|)$' })) 'All reg entries well-formed'
 Assert (-not ($Patches.Values | Where-Object { -not $_.Desc })) 'Every patch has a description'
 
 $reg = Get-PatchReg $Presets.Recommended.Patches

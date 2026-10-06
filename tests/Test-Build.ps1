@@ -41,6 +41,7 @@ try {
                     if ($name -eq '@') { $out = reg query (Convert-RegPath $path) /ve 2>$null; Check ($LASTEXITCODE -eq 0) "$id : $path default value"; continue }
                     $out = reg query (Convert-RegPath $path) /v $name 2>$null
                     if ($value -eq '-') { Check (-not $out) "$id : $name deleted" }
+                    elseif ($value -like 'sz:*') { Check ($out -match "REG_SZ\s+$([regex]::Escape($value.Substring(3)))\s*$") "$id : $name = $value" }
                     else { Check ($out -match "0x$('{0:x}' -f [long]$value)\b") "$id : $name = $value" }
                 }
             }
