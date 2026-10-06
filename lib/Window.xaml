@@ -336,6 +336,7 @@
         <DockPanel Grid.Row="2" Margin="0,4,0,14">
           <Button x:Name="BuildBtn" Style="{StaticResource Primary}" Content="Build ISO" DockPanel.Dock="Right" MinWidth="160"/>
           <Button x:Name="TestVm" Content="Test in VM" DockPanel.Dock="Right" Margin="0,0,10,0" Padding="18,11" ToolTip="Boot the built ISO in a Hyper-V virtual machine"/>
+          <Button x:Name="RemoveVm" Content="Remove VM" DockPanel.Dock="Right" Margin="0,0,10,0" Padding="18,11" ToolTip="Delete the test VM and its virtual disk"/>
           <StackPanel VerticalAlignment="Center" Margin="0,0,24,0">
             <TextBlock x:Name="StepText" Text="Ready" Foreground="{StaticResource Muted}" Margin="0,0,0,8"/>
             <ProgressBar x:Name="Progress" Maximum="9"/></StackPanel>

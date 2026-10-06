@@ -260,6 +260,20 @@ $ui.CleanUp.Add_Click({
 
 # --- Test in VM (Hyper-V) ---
 $vmName = 'Win11 Ultimate Test'
+function Remove-TestVm {
+    if (Get-Command Hyper-V\Get-VM -ErrorAction SilentlyContinue) {
+        if (Hyper-V\Get-VM $vmName -ErrorAction SilentlyContinue) { Hyper-V\Stop-VM $vmName -TurnOff -Force -ErrorAction SilentlyContinue; Hyper-V\Remove-VM $vmName -Force }
+    }
+    if (Test-Path "$root\vm") { Remove-Item "$root\vm" -Recurse -Force }
+}
+$ui.RemoveVm.Add_Click({
+        $hasVm = (Get-Command Hyper-V\Get-VM -ErrorAction SilentlyContinue) -and (Hyper-V\Get-VM $vmName -ErrorAction SilentlyContinue)
+        if (-not $hasVm -and -not (Test-Path "$root\vm")) { Show-Msg 'There is no test VM to remove.' | Out-Null; return }
+        if ((Show-Msg "Remove the test VM '$vmName' and delete its virtual disk ($(Get-FolderGB "$root\vm") GB)?" 'Question' 'YesNo') -ne 'Yes') { return }
+        $win.Cursor = 'Wait'
+        try { Remove-TestVm } catch { Show-Msg "Could not remove the VM:`n$_" 'Error' | Out-Null }
+        finally { $win.Cursor = $null; Update-Storage }
+    })
 $ui.TestVm.Add_Click({
         $iso = $ui.Output.Text
         if (-not (Test-Path $iso)) { Show-Msg 'Build the ISO first.' 'Warning' | Out-Null; return }
@@ -268,11 +282,10 @@ $ui.TestVm.Add_Click({
         }
         if (Hyper-V\Get-VM $vmName -ErrorAction SilentlyContinue) {
             if ((Show-Msg "Replace the existing test VM '$vmName'? Its virtual disk is deleted." 'Question' 'YesNo') -ne 'Yes') { return }
-            Hyper-V\Stop-VM $vmName -TurnOff -Force -ErrorAction SilentlyContinue; Hyper-V\Remove-VM $vmName -Force
         }
         $win.Cursor = 'Wait'
         try {
-            if (Test-Path "$root\vm") { Remove-Item "$root\vm" -Recurse -Force }
+            Remove-TestVm
             $vmArgs = @{ Name = $vmName; Generation = 2; MemoryStartupBytes = 4GB; Path = "$root\vm"; NewVHDPath = "$root\vm\disk.vhdx"; NewVHDSizeBytes = 80GB }
             if (Hyper-V\Get-VMSwitch 'Default Switch' -ErrorAction SilentlyContinue) { $vmArgs.SwitchName = 'Default Switch' }
             $vm = Hyper-V\New-VM @vmArgs
