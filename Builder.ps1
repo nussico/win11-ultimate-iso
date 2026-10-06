@@ -40,6 +40,8 @@ public static void Flash(IntPtr h) { var f = new FLASHWINFO(); f.cbSize = (uint)
 '@
 
 # --- Navigation ---
+# Narrow window: drop the summary from the top bar so all tabs stay visible.
+$win.Add_SizeChanged({ $ui.Summary.Visibility = if ($win.ActualWidth -lt 1150) { 'Collapsed' } else { 'Visible' } })
 $ui.Nav.Add_SelectionChanged({
         foreach ($i in $ui.Nav.Items) { $ui[$i.Tag].Visibility = if ($i.IsSelected) { 'Visible' } else { 'Collapsed' } }
         if ($ui.Nav.SelectedItem.Tag -eq 'PageBuild') { Update-Plan }
@@ -65,6 +67,11 @@ try {
     $latest = Invoke-RestMethod "https://api.github.com/repos/$repo/commits/main" -Headers @{ Accept = 'application/vnd.github.sha' } -TimeoutSec 5
     if ($latest -and $latest.Trim() -ne $have) { $ui.UpdateBtn.Visibility = 'Visible' }
 } catch { }   # manual install, offline or rate-limited: no button
+# --- Info page ---
+$ui.InfoVersion.Text = if (Test-Path "$root\version.txt") { (Get-Content "$root\version.txt" -Raw).Trim() -replace '^(.{7}).*', '$1' } else { 'dev copy (not installed with install.ps1)' }
+$ui.InfoFolder.Text = $root
+$ui.OpenGitHub.Add_Click({ Start-Process "https://github.com/$repo" })
+$ui.OpenFolder.Add_Click({ Start-Process explorer.exe $root })
 $ui.UpdateBtn.Add_Click({
         if ($script:job) { Show-Msg 'A build is running. Update when it is done.' | Out-Null; return }
         if ((Show-Msg 'Download the newest builder and restart it? Your ISOs and output are kept.' 'Question' 'YesNo') -ne 'Yes') { return }

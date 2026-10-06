@@ -160,14 +160,14 @@
     <Style x:Key="Nav" TargetType="ListBoxItem">
       <Setter Property="Foreground" Value="{StaticResource Muted}"/><Setter Property="FontSize" Value="14"/><Setter Property="Cursor" Value="Hand"/>
       <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
-        <Border x:Name="b" CornerRadius="6" Padding="14,9" Margin="10,2" Background="Transparent">
-          <StackPanel Orientation="Horizontal">
-            <Border x:Name="bar" Width="3" Height="0" CornerRadius="2" Background="{StaticResource Accent}" Margin="0,0,12,0"/>
-            <ContentPresenter VerticalAlignment="Center"/></StackPanel></Border>
+        <Border x:Name="b" CornerRadius="6" Padding="14,7,14,5" Margin="2,0" Background="Transparent">
+          <StackPanel>
+            <ContentPresenter HorizontalAlignment="Center"/>
+            <Border x:Name="bar" Height="2" Width="0" CornerRadius="1" Background="{StaticResource Accent}" Margin="0,5,0,0" HorizontalAlignment="Center"/></StackPanel></Border>
         <ControlTemplate.Triggers>
           <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#1C2029"/></Trigger>
           <Trigger Property="IsSelected" Value="True">
-            <Trigger.EnterActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="bar" Storyboard.TargetProperty="Height" To="16" Duration="0:0:0.2" DecelerationRatio="1"/></Storyboard></BeginStoryboard></Trigger.EnterActions><Trigger.ExitActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="bar" Storyboard.TargetProperty="Height" To="0" Duration="0:0:0.2" DecelerationRatio="1"/></Storyboard></BeginStoryboard></Trigger.ExitActions>
+            <Trigger.EnterActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="bar" Storyboard.TargetProperty="Width" To="22" Duration="0:0:0.2" DecelerationRatio="1"/></Storyboard></BeginStoryboard></Trigger.EnterActions><Trigger.ExitActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="bar" Storyboard.TargetProperty="Width" To="0" Duration="0:0:0.2" DecelerationRatio="1"/></Storyboard></BeginStoryboard></Trigger.ExitActions>
             <Setter TargetName="b" Property="Background" Value="#1F2633"/>
             <Setter Property="Foreground" Value="{StaticResource Text}"/></Trigger>
         </ControlTemplate.Triggers>
@@ -195,34 +195,34 @@
   </Window.Resources>
 
   <Grid>
-    <Grid.ColumnDefinitions><ColumnDefinition Width="230"/><ColumnDefinition/></Grid.ColumnDefinitions>
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
 
-    <!-- Sidebar -->
-    <Border Background="{StaticResource Side}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
-      <DockPanel>
-        <StackPanel DockPanel.Dock="Top" Margin="24,26,20,24">
-          <StackPanel Orientation="Horizontal">
-            <Image Source="{StaticResource Logo}" Width="30" Height="30" Margin="0,0,10,0"/>
-            <StackPanel><TextBlock Text="Win11 Ultimate" FontWeight="SemiBold" FontSize="15"/>
-              <TextBlock Text="ISO Builder" FontSize="12" Foreground="{StaticResource Muted}"/></StackPanel>
-          </StackPanel>
+    <!-- Top bar: logo, tabs, preset -->
+    <Border Background="{StaticResource Side}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1">
+      <DockPanel Margin="20,10,20,10">
+        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,28,0">
+          <Image Source="{StaticResource Logo}" Width="28" Height="28" Margin="0,0,10,0"/>
+          <StackPanel VerticalAlignment="Center"><TextBlock Text="Win11 Ultimate" FontWeight="SemiBold" FontSize="14"/>
+            <TextBlock Text="ISO Builder" FontSize="11" Foreground="{StaticResource Muted}"/></StackPanel>
         </StackPanel>
-        <StackPanel DockPanel.Dock="Bottom" Margin="24,0,20,24">
-          <Button x:Name="UpdateBtn" Style="{StaticResource Primary}" Content="Update available" Visibility="Collapsed" Margin="0,0,0,18" ToolTip="Download the newest builder and restart"/>
-          <TextBlock Text="PRESET" Style="{StaticResource Section}"/>
-          <ComboBox x:Name="Preset"/>
-          <TextBlock x:Name="Summary" Style="{StaticResource Hint}" Margin="0,12,0,0"/>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+          <Button x:Name="UpdateBtn" Style="{StaticResource Primary}" Content="Update available" Visibility="Collapsed" Margin="0,0,16,0" ToolTip="Download the newest builder and restart"/>
+          <TextBlock x:Name="Summary" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="0,0,16,0"/>
+          <TextBlock Text="PRESET" Style="{StaticResource Section}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+          <ComboBox x:Name="Preset" Width="150"/>
         </StackPanel>
-        <ListBox x:Name="Nav" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource Nav}">
+        <ListBox x:Name="Nav" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource Nav}" VerticalAlignment="Center" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+          <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ListBox.ItemsPanel>
           <ListBoxItem Content="Source" Tag="PageSource" IsSelected="True"/>
           <ListBoxItem Content="Patches" Tag="PagePatches"/>
           <ListBoxItem Content="Unattended" Tag="PageUnattended"/>
           <ListBoxItem Content="Build" Tag="PageBuild"/>
+          <ListBoxItem Content="Info" Tag="PageInfo"/>
         </ListBox>
       </DockPanel>
     </Border>
 
-    <Grid Grid.Column="1">
+    <Grid Grid.Row="1">
       <!-- Source -->
       <ScrollViewer x:Name="PageSource" Style="{StaticResource Page}" VerticalScrollBarVisibility="Auto"><StackPanel Margin="36,30,36,30">
         <TextBlock Text="Source" Style="{StaticResource H1}"/>
@@ -355,6 +355,38 @@
             <TextBlock x:Name="StorageText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{StaticResource Muted}"/></DockPanel>
         </StackPanel></Border>
       </Grid>
+
+      <!-- Info -->
+      <ScrollViewer x:Name="PageInfo" Style="{StaticResource Page}" Visibility="Collapsed" VerticalScrollBarVisibility="Auto"><StackPanel Margin="36,30,36,30">
+        <TextBlock Text="Info" Style="{StaticResource H1}"/>
+        <TextBlock Text="About this builder and how to use it." Style="{StaticResource Sub}"/>
+        <Border Style="{StaticResource Card}"><StackPanel>
+          <TextBlock Text="ABOUT" Style="{StaticResource Section}"/>
+          <StackPanel Style="{StaticResource Row}"><TextBlock Text="Version" Style="{StaticResource Label}"/><TextBlock x:Name="InfoVersion"/></StackPanel>
+          <StackPanel Style="{StaticResource Row}"><TextBlock Text="Installed in" Style="{StaticResource Label}"/><TextBlock x:Name="InfoFolder"/></StackPanel>
+          <StackPanel Orientation="Horizontal"><TextBlock Text="Project page" Style="{StaticResource Label}"/>
+            <Button x:Name="OpenGitHub" Content="github.com/nussico/win11-ultimate-iso" Padding="10,4"/>
+            <Button x:Name="OpenFolder" Content="Open folder" Padding="10,4" Margin="10,0,0,0"/></StackPanel>
+        </StackPanel></Border>
+        <Border Style="{StaticResource Card}"><StackPanel>
+          <TextBlock Text="HOW TO USE" Style="{StaticResource Section}"/>
+          <TextBlock TextWrapping="Wrap" LineHeight="22">
+            <Run FontWeight="SemiBold" Text="1. Source"/><Run Text="  -  pick the language and tick the editions. Your own ISOs in the sources folder are used, anything missing is downloaded."/><LineBreak/>
+            <Run FontWeight="SemiBold" Text="2. Patches"/><Run Text="  -  pick a preset at the top right or tick patches yourself. Essential apps are always kept."/><LineBreak/>
+            <Run FontWeight="SemiBold" Text="3. Unattended"/><Run Text="  -  optional: account, language, keyboard and automatic install, so setup asks nothing."/><LineBreak/>
+            <Run FontWeight="SemiBold" Text="4. Build"/><Run Text="  -  check the plan, click Build ISO, then Test in VM. Put the ISO on a USB stick with Rufus or Ventoy."/>
+          </TextBlock>
+        </StackPanel></Border>
+        <Border Style="{StaticResource Card}" BorderBrush="{StaticResource Danger}"><StackPanel>
+          <TextBlock Text="GOOD TO KNOW" Style="{StaticResource Section}" Foreground="{StaticResource Danger}"/>
+          <TextBlock TextWrapping="Wrap" LineHeight="22">
+            <Run Text="- Automatic install (Best SSD, Disk 0) ERASES a disk on any PC booted from that ISO. Label the USB stick."/><LineBreak/>
+            <Run Text="- Aggressive patches (Edge, Defender, Recall) can break apps or updates."/><LineBreak/>
+            <Run Text="- Activation: use your own key or the PC's digital license. No activation tools are included."/><LineBreak/>
+            <Run Text="- Not affiliated with Microsoft, Chris Titus Tech or UUP dump. Use at your own risk. MIT license."/>
+          </TextBlock>
+        </StackPanel></Border>
+      </StackPanel></ScrollViewer>
     </Grid>
   </Grid>
 </Window>

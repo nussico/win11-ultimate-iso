@@ -12,7 +12,7 @@ The user is an IT apprentice and gamer; answer in short, plain English.
 
 ## Layout
 - `Builder.ps1` - WPF GUI entry. Self-elevates via `conhost.exe --headless powershell.exe -STA` (no console window). Build runs in a background runspace; `$sync` hashtable (Log queue, Step, Cancel, Done, Error) polled by a DispatcherTimer.
-- `lib/Window.xaml` - dark theme. Pages: Source (language, editions, ISOs, UUP, storage), Patches, Unattended, Build (plan, output, Test in VM, log).
+- `lib/Window.xaml` - dark theme. Top bar (logo, tabs, preset, Update button). Pages: Source, Patches, Unattended, Build (plan, output, log, Test in VM, storage), Info (version, folder, how-to, warnings).
 - `lib/Build.ps1` - `Invoke-Build`, steps 1-9, detailed log + summary to `out\build-log.txt`.
 - `lib/Source.ps1` - ISO detection, UUP dump (`Get-UupBuilds`, `Select-NewestUupBuild`, `Save-UupIso`), `Get-BuildPlan` (shared by build and GUI plan card).
 - `lib/Patches.ps1` - `$Patches` catalog (Group, Label, Desc, Reg, Action, Boot), `$RemoveApps`, `$ProtectedApps`, `$Presets`, offline registry helpers.
