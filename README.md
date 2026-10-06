@@ -42,7 +42,7 @@ Manual: download the repo ZIP, extract, right-click `Builder.ps1` -> *Run with P
 ## Requirements
 
 Windows 10/11, admin rights, about 60 GB free disk space, internet for UUP dump.
-The first build installs the Windows ADK *Deployment Tools* (and, for *Best SSD*, the *WinPE add-on*) via winget.
+The first build installs the Windows ADK *Deployment Tools* via winget.
 
 ## Presets
 

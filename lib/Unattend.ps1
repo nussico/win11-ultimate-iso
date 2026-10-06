@@ -33,8 +33,8 @@ function New-UnattendXml($u) {
     $pe = "<UserData>$key<AcceptEula>true</AcceptEula></UserData>"
     if ($u.AutoInstall -eq 'BestSsd') {
         # Script picks the disk and installs; if it exits without rebooting, normal Setup continues.
-        $run = 'cmd /c for %d in (C D E F G H I J K L M N O P Q R T U V Y Z) do if exist %d:\sources\autoinstall.ps1 powershell -NoProfile -ExecutionPolicy Bypass -File %d:\sources\autoinstall.ps1'
-        $pe += "<RunSynchronous><RunSynchronousCommand wcm:action=`"add`"><Order>1</Order><Path>$run</Path></RunSynchronousCommand></RunSynchronous>"
+        $run = "cmd /c for %d in (C D E F G H I J K L M N O P Q R T U V Y Z) do if exist %d:\sources\autoinstall.js cscript //nologo %d:\sources\autoinstall.js `"$($u.Edition)`""
+        $pe += "<RunSynchronous><RunSynchronousCommand wcm:action=`"add`"><Order>1</Order><Path>$(& $esc $run)</Path></RunSynchronousCommand></RunSynchronous>"
     }
     if ($u.AutoInstall -eq 'Disk0') {
         $pe += '<DiskConfiguration><Disk wcm:action="add"><DiskID>0</DiskID><WillWipeDisk>true</WillWipeDisk><CreatePartitions>' +

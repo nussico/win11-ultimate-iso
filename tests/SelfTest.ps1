@@ -53,22 +53,31 @@ $s = ([xml](New-UnattendXml $u)).OuterXml
 Assert ($s -match 'AAAAA-BBBBB' -and $s -notmatch 'VK7JG') 'Own product key overrides generic key'
 $u.AutoInstall = 'BestSsd'
 $s = ([xml](New-UnattendXml $u)).OuterXml
-Assert ($s -match 'autoinstall.ps1' -and $s -notmatch 'WillWipeDisk') 'BestSsd runs script, no fixed-disk wipe'
+Assert ($s -match 'cscript //nologo %d:\\sources\\autoinstall.js "Windows 11 Pro"' -and $s -notmatch 'WillWipeDisk') 'BestSsd runs script with edition, no fixed-disk wipe'
 $s = ([xml](New-LocalAccountXml)).OuterXml
 Assert ($s -match 'HideOnlineAccountScreens>true' -and $s -notmatch 'windowsPE|LocalAccounts') 'Local-account-only XML: hides MS account, setup stays interactive'
 
-# Disk picking (autoinstall.ps1)
-. "$root\lib\autoinstall.ps1"
-function D($n, $bus, $media, $gb) { [pscustomobject]@{ Number = $n; BusType = $bus; MediaType = $media; Size = [int64]$gb * 1GB } }
-Assert ((Select-TargetDisk @((D 0 'SATA' 'HDD' 2000), (D 1 'NVMe' 'SSD' 1000))).Number -eq 1) 'NVMe beats HDD'
-Assert ((Select-TargetDisk @((D 0 'SATA' 'HDD' 2000), (D 1 'SATA' 'SSD' 500))).Number -eq 1) 'SATA SSD beats HDD'
-Assert ((Select-TargetDisk @((D 0 'NVMe' 'SSD' 1000), (D 1 'SATA' 'SSD' 500))).Number -eq 0) 'NVMe beats SATA SSD'
-Assert ($null -eq (Select-TargetDisk @((D 0 'NVMe' 'SSD' 1000), (D 1 'NVMe' 'SSD' 2000)))) 'Two NVMe -> ambiguous, no pick'
-Assert ($null -eq (Select-TargetDisk @((D 0 'SATA' 'HDD' 1000), (D 1 'SATA' 'HDD' 2000)))) 'Two HDDs -> no pick'
-Assert ((Select-TargetDisk @((D 0 'USB' 'SSD' 1000), (D 1 'SATA' 'HDD' 500))).Number -eq 1) 'USB never picked'
-Assert ($null -eq (Select-TargetDisk @((D 0 'NVMe' 'SSD' 32)))) 'Disk < 64 GB never picked'
-Assert ((Select-TargetDisk @((D 0 'NVMe' 'SSD' 1000), (D 1 'SATA' 'SSD' 500)) -Exclude 0).Number -eq 1) 'Install-media disk excluded'
-Assert ((Select-TargetDisk @((D 0 'SCSI' 'Unspecified' 127))).Number -eq 0) 'Single Hyper-V disk picked'
+# Disk picking (autoinstall.js, run with cscript like Setup does). Bus: 1 SCSI, 7 USB, 11 SATA, 17 NVMe. Media: 0 ?, 3 HDD, 4 SSD.
+$cases = [ordered]@{
+    'NVMe beats HDD'                 = '[D(0,11,3,2000), D(1,17,4,1000)], [], 1'
+    'SATA SSD beats HDD'             = '[D(0,11,3,2000), D(1,11,4,500)], [], 1'
+    'NVMe beats SATA SSD'            = '[D(0,17,4,1000), D(1,11,4,500)], [], 0'
+    'Two NVMe -> ambiguous, no pick' = '[D(0,17,4,1000), D(1,17,4,2000)], [], null'
+    'Two HDDs -> no pick'            = '[D(0,11,3,1000), D(1,11,3,2000)], [], null'
+    'USB never picked'               = '[D(0,7,4,1000), D(1,11,3,500)], [], 1'
+    'Disk < 64 GB never picked'      = '[D(0,17,4,32)], [], null'
+    'Install-media disk excluded'    = '[D(0,17,4,1000), D(1,11,4,500)], [0], 1'
+    'Single Hyper-V disk picked'     = '[D(0,1,0,127)], [], 0'
+}
+$js = "var TESTING = true;`r`n" + (Get-Content "$root\lib\autoinstall.js" -Raw) + "`r`n" +
+    'function D(n, bus, media, gb) { return { Number: n, BusType: bus, MediaType: media, Size: gb * GB }; }' + "`r`n" +
+    'function t(disks, ex, want) { var d = selectTargetDisk(disks, ex); WScript.Echo((d ? d.Number : null) === want ? "ok" : "FAIL"); }' + "`r`n" +
+    (($cases.Values | ForEach-Object { "t($_);" }) -join "`r`n")
+$jsFile = Join-Path $env:TEMP 'w11-autoinstall-test.js'
+Set-Content $jsFile $js -Encoding ASCII
+$res = @(cscript //nologo //E:jscript $jsFile)
+Remove-Item $jsFile
+$i = 0; foreach ($name in $cases.Keys) { Assert ($res[$i++] -eq 'ok') $name }
 
 # Source
 $info = ConvertTo-IsoInfo 'x.iso' @([pscustomobject]@{ ImageIndex = 1; ImageName = 'Windows 11 Home' }, [pscustomobject]@{ ImageIndex = 6; ImageName = 'Windows 11 Pro' }) ([pscustomobject]@{ Languages = @('de-DE'); Version = '10.0.26200.6584' })
