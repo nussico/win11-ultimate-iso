@@ -5,3 +5,6 @@ cache/
 sources/*
 !sources/.gitkeep
 vm/
+
+# your remembered GUI choices
+settings.json
