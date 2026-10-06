@@ -72,4 +72,15 @@ Assert ((Select-NewestUupBuild $builds).uuid -eq 'b') 'Newest: 25H2 newest revis
 $builds += [pscustomobject]@{ title = 'Windows 11, version 26H2 (26300.1000)'; build = '26300.1000'; uuid = 'f' }
 Assert ((Select-NewestUupBuild $builds).uuid -eq 'f') 'Newest: switches to 26H2 once it exists'
 
+# Background build wiring (same pattern as Builder.ps1). Cancel is preset, so nothing is built.
+$sync = [hashtable]::Synchronized(@{ Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]'; Step = 0; Cancel = $true; Done = $false; Error = $null })
+$ps = [powershell]::Create()
+$ps.AddScript({
+        param($root, $cfg, $sync)
+        . "$root\lib\Patches.ps1"; . "$root\lib\Unattend.ps1"; . "$root\lib\Source.ps1"; . "$root\lib\Build.ps1"
+        Invoke-Build $cfg $sync
+    }).AddArgument($root).AddArgument(@{ Output = "$env:TEMP\w11selftest\x.iso"; WorkDir = "$env:TEMP\w11selftest\work"; Unattend = @{} }).AddArgument($sync) | Out-Null
+$ps.Invoke() | Out-Null; $ps.Dispose()
+Assert ($sync.Done -and $sync.Error -eq 'Cancelled by user' -and $sync.Log.Count -gt 0) 'Background build reports log + done to the GUI'
+
 if ($fails) { Write-Host "$fails failed" -ForegroundColor Red; exit 1 } else { Write-Host 'all passed' -ForegroundColor Green }

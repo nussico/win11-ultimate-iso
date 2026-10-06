@@ -2,13 +2,17 @@
 # Always runs in elevated Windows PowerShell 5.1 (STA, needed by WPF).
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole('Administrators')
 if (-not $isAdmin -or $PSVersionTable.PSEdition -ne 'Desktop') {
-    Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -STA -File `"$PSCommandPath`""
+    # conhost --headless: no console window, even when Windows Terminal is the default terminal
+    Start-Process conhost.exe -Verb RunAs -ArgumentList "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File `"$PSCommandPath`""
     exit
 }
 
+Add-Type -AssemblyName PresentationFramework, System.Windows.Forms
+# There is no console window, so show startup errors instead of failing silently.
+trap { [Windows.MessageBox]::Show("The builder could not start:`n`n$_`n`n$($_.InvocationInfo.PositionMessage)", 'Win11 Ultimate', 'OK', 'Error') | Out-Null; exit 1 }
+
 $root = $PSScriptRoot
 . "$root\lib\Patches.ps1"; . "$root\lib\Unattend.ps1"; . "$root\lib\Source.ps1"
-Add-Type -AssemblyName PresentationFramework, System.Windows.Forms
 
 $xaml = [xml](Get-Content "$root\lib\Window.xaml" -Raw)
 $win = [Windows.Markup.XamlReader]::Load((New-Object Xml.XmlNodeReader $xaml))
@@ -199,7 +203,9 @@ $timer.Add_Tick({
         $s = [math]::Min(9, $script:sync.Step)
         $ui.Progress.Value = $s
         if ($s -gt 0) { $ui.StepText.Text = "Step $s of 9 - $($stepNames[$s - 1])" }
-        if ($script:sync.Done) {
+        if ($script:sync.Done -or $script:job.Handle.IsCompleted) {
+            if (-not $script:sync.Done -and -not $script:sync.Error) { $script:sync.Error = 'The build stopped unexpectedly. See the log.' }
+            foreach ($e in $script:job.PS.Streams.Error) { $ui.Log.AppendText("ERROR: $e`r`n") }
             $timer.Stop()
             try { $script:job.PS.EndInvoke($script:job.Handle) } catch { $ui.Log.AppendText("$_`r`n") }
             $script:job.PS.Runspace.Close(); $script:job.PS.Dispose(); $script:job = $null

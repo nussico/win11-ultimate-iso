@@ -67,6 +67,7 @@ function Get-UupLanguages($Uuid) {
 }
 
 function Save-Url($Url, $Out, $Sha1) {
+    $ErrorActionPreference = 'Continue'
     if ((Test-Path $Out) -and (Get-FileHash $Out -Algorithm SHA1).Hash -eq $Sha1) { return }
     curl.exe -sSL --retry 3 -o $Out $Url
     if ($LASTEXITCODE) { throw "Download failed: $Out" }

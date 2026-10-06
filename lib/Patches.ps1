@@ -111,30 +111,41 @@ function Remove-Apps($Mount, [string[]]$Wanted) {
 }
 
 function Remove-ImagePath($Path) {
+    $ErrorActionPreference = 'Continue'   # native tools below write to stderr
     if (-not (Test-Path $Path)) { return }
     takeown /f $Path /r /d y /a 2>&1 | Out-Null
     icacls $Path /grant '*S-1-5-32-544:F' /t /c /q 2>&1 | Out-Null
-    Remove-Item $Path -Recurse -Force
+    Remove-Item $Path -Recurse -Force -ErrorAction Stop
     Write-Log "  deleted $Path"
 }
 
+# Native tools: Windows PowerShell 5.1 turns their stderr into terminating errors under
+# ErrorActionPreference=Stop, so these helpers use Continue locally and check exit codes.
+function Mount-Hive($Name, $File) {
+    $ErrorActionPreference = 'Continue'
+    reg load "HKLM\WIM_$Name" $File 2>&1 | Out-Null
+    if ($LASTEXITCODE) { throw "reg load $Name failed ($File)" }
+}
+
 function Mount-Hives($Mount) {
-    reg load HKLM\WIM_SYSTEM "$Mount\Windows\System32\config\SYSTEM" | Out-Null
-    reg load HKLM\WIM_SOFTWARE "$Mount\Windows\System32\config\SOFTWARE" | Out-Null
-    reg load HKLM\WIM_DEFAULT "$Mount\Users\Default\NTUSER.DAT" | Out-Null
+    Mount-Hive SYSTEM "$Mount\Windows\System32\config\SYSTEM"
+    Mount-Hive SOFTWARE "$Mount\Windows\System32\config\SOFTWARE"
+    Mount-Hive DEFAULT "$Mount\Users\Default\NTUSER.DAT"
 }
 
 function Dismount-Hives {
+    $ErrorActionPreference = 'Continue'   # unloading a hive that is not loaded is fine
     [gc]::Collect()
     foreach ($h in 'SYSTEM', 'SOFTWARE', 'DEFAULT') { reg unload "HKLM\WIM_$h" 2>&1 | Out-Null }
 }
 
 function Set-OfflineReg([string[]]$Entries) {
+    $ErrorActionPreference = 'Continue'
     foreach ($e in $Entries) {
         $path, $name, $value = $e -split '\|'
         $key = Convert-RegPath $path
         if ($value -eq '-') { reg delete $key /v $name /f 2>&1 | Out-Null }
-        else { reg add $key /v $name /t REG_DWORD /d $value /f | Out-Null; if ($LASTEXITCODE) { throw "reg add failed: $e" } }
+        else { reg add $key /v $name /t REG_DWORD /d $value /f 2>&1 | Out-Null; if ($LASTEXITCODE) { throw "reg add failed: $e" } }
     }
 }
 
@@ -152,6 +163,6 @@ function Invoke-Patches($Mount, [string[]]$Ids, $Cfg) {
 
 # boot.wim only gets the hardware-check bypass (SYSTEM hive only).
 function Set-BootPatches($Mount) {
-    reg load HKLM\WIM_SYSTEM "$Mount\Windows\System32\config\SYSTEM" | Out-Null
-    try { Set-OfflineReg ($Patches.hwchecks.Reg) } finally { [gc]::Collect(); reg unload HKLM\WIM_SYSTEM 2>&1 | Out-Null }
+    Mount-Hive SYSTEM "$Mount\Windows\System32\config\SYSTEM"
+    try { Set-OfflineReg ($Patches.hwchecks.Reg) } finally { Dismount-Hives }
 }

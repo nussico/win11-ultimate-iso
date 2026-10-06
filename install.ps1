@@ -21,5 +21,6 @@
     Get-ChildItem $dir -Recurse -File | Unblock-File
     Remove-Item $zip, $tmp -Recurse -Force
 
-    Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -STA -File `"$dir\Builder.ps1`""
+    # conhost --headless: the builder opens without an extra console window
+    Start-Process conhost.exe -Verb RunAs -ArgumentList "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File `"$dir\Builder.ps1`""
 }

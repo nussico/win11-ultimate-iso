@@ -1,25 +1,26 @@
 # Build pipeline. Runs in a background runspace; talks to the GUI via $Sync (synchronized hashtable):
 #   Log (ConcurrentQueue[string]), Step (int), Cancel (bool), Done (bool), Error (string)
 
-$script:Sync = $null
+$script:BuildSync = $null
 $script:LogFile = $null
 $script:MountedIsos = @()
 
 function Write-Log($Msg) {
     $line = '[{0:HH:mm:ss}] {1}' -f (Get-Date), $Msg
-    if ($script:Sync) { $script:Sync.Log.Enqueue($line) } else { Write-Host $line }
+    if ($script:BuildSync) { $script:BuildSync.Log.Enqueue($line) } else { Write-Host $line }
     if ($script:LogFile) { Add-Content $script:LogFile $line }
 }
 
 function Enter-Step($N, $Name) {
-    if ($script:Sync.Cancel) { throw 'Cancelled by user' }
-    $script:Sync.Step = $N
+    if ($script:BuildSync.Cancel) { throw 'Cancelled by user' }
+    $script:BuildSync.Step = $N
     Write-Log "== Step $N/9: $Name"
 }
 
 function Get-Oscdimg {
     $p = "${env:ProgramFiles(x86)}\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe"
     if (Test-Path $p) { return $p }
+    $ErrorActionPreference = 'Continue'
     Write-Log 'oscdimg not found, installing ADK Deployment Tools via winget...'
     winget install -e --id Microsoft.WindowsADK --accept-package-agreements --accept-source-agreements --override '/quiet /norestart /features OptionId.DeploymentTools' | Out-Null
     if (Test-Path $p) { return $p }
@@ -29,6 +30,7 @@ function Get-Oscdimg {
 function Get-WinPEOcs {
     $p = "${env:ProgramFiles(x86)}\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment\amd64\WinPE_OCs"
     if (Test-Path "$p\WinPE-PowerShell.cab") { return $p }
+    $ErrorActionPreference = 'Continue'
     Write-Log 'WinPE add-on not found, installing via winget (about 1 GB)...'
     winget install -e --id Microsoft.WindowsADK.WinPEAddon --accept-package-agreements --accept-source-agreements --override '/quiet /norestart /features OptionId.WindowsPreinstallationEnvironment' | Out-Null
     if (Test-Path "$p\WinPE-PowerShell.cab") { return $p }
@@ -48,8 +50,8 @@ function Add-WinPEPowerShell($Mount, $Ocs, $Lang) {
 function Mount-SourceIso($Path) { $script:MountedIsos += $Path; Mount-Iso $Path }
 
 function Clear-BuildState {
+    $ErrorActionPreference = 'Continue'
     Dismount-Hives
-    reg unload HKLM\WIM_SYSTEM 2>&1 | Out-Null
     Get-WindowsImage -Mounted -ErrorAction SilentlyContinue | ForEach-Object {
         Write-Log "Discarding mounted image $($_.Path)"
         Dismount-WindowsImage -Path $_.Path -Discard -ErrorAction SilentlyContinue | Out-Null
@@ -59,7 +61,7 @@ function Clear-BuildState {
 }
 
 function Invoke-Build($Cfg, $Sync) {
-    $script:Sync = $Sync
+    $script:BuildSync = $Sync
     $ErrorActionPreference = 'Stop'
     $ProgressPreference = 'SilentlyContinue'
     $w = $Cfg.WorkDir
@@ -117,8 +119,10 @@ function Invoke-Build($Cfg, $Sync) {
         }
         $drive = Mount-SourceIso $base.Path
         Write-Log "Copying $($base.Path)"
+        $ErrorActionPreference = 'Continue'
         robocopy "$drive\" "$w\iso" /E /A-:R /NFL /NDL /NJH /NJS /NP | Out-Null
         if ($LASTEXITCODE -ge 8) { throw "robocopy failed ($LASTEXITCODE)" }
+        $ErrorActionPreference = 'Stop'
         Remove-Item "$w\iso\sources\install.wim", "$w\iso\sources\install.esd" -ErrorAction SilentlyContinue
 
         $lps = @()
@@ -195,8 +199,10 @@ function Invoke-Build($Cfg, $Sync) {
         Enter-Step 8 'Create ISO'
         if (Test-Path $Cfg.Output) { Remove-Item $Cfg.Output }
         $boot = "2#p0,e,b$w\iso\boot\etfsboot.com#pEF,e,b$w\iso\efi\microsoft\boot\efisys.bin"
+        $ErrorActionPreference = 'Continue'   # oscdimg writes progress to stderr
         & $oscdimg -m -o -u2 -udfver102 "-bootdata:$boot" -lWIN11_ULTIMATE "$w\iso" $Cfg.Output 2>&1 | Out-Null
         if ($LASTEXITCODE) { throw "oscdimg failed ($LASTEXITCODE)" }
+        $ErrorActionPreference = 'Stop'
 
         Enter-Step 9 'Finish'
         $saved = $Cfg.Clone(); $saved.Unattend = $Cfg.Unattend.Clone(); $saved.Unattend.Password = ''; $saved.Unattend.ProductKey = ''   # never write secrets to disk
@@ -208,7 +214,7 @@ function Invoke-Build($Cfg, $Sync) {
         Write-Log "ERROR in step $($Sync.Step): $_"
         Write-Log "Work folder kept for inspection: $w"
     } finally {
-        Clear-BuildState
+        try { Clear-BuildState } catch { Write-Log "Cleanup warning: $_" }
         $Sync.Done = $true
     }
 }
