@@ -4,9 +4,11 @@
 $script:BuildSync = $null
 $script:LogFile = $null
 $script:MountedIsos = @()
+$script:Report = $null   # Start, Steps (@{Name; Start}), Images, Apps, Reg, Warnings - for the summary
 
 function Write-Log($Msg) {
     $line = '[{0:HH:mm:ss}] {1}' -f (Get-Date), $Msg
+    if ($script:Report -and $Msg -match '^\s*(WARN|NOTE)') { $script:Report.Warnings += $Msg.Trim() }
     if ($script:BuildSync) { $script:BuildSync.Log.Enqueue($line) } else { Write-Host $line }
     if ($script:LogFile) { Add-Content $script:LogFile $line }
 }
@@ -14,7 +16,41 @@ function Write-Log($Msg) {
 function Enter-Step($N, $Name) {
     if ($script:BuildSync.Cancel) { throw 'Cancelled by user' }
     $script:BuildSync.Step = $N
+    $script:Report.Steps += @{ Name = "$N $Name"; Start = Get-Date }
     Write-Log "== Step $N/9: $Name"
+}
+
+function Format-Duration([timespan]$T) { '{0}m {1:00}s' -f [int][math]::Floor($T.TotalMinutes), $T.Seconds }
+
+function Write-BuildHeader($Cfg) {
+    $u = $Cfg.Unattend
+    Write-Log "Win11 Ultimate Builder - build started $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+    Write-Log "Host:           $((Get-CimInstance Win32_OperatingSystem).Caption) $([Environment]::OSVersion.Version), PowerShell $($PSVersionTable.PSVersion)"
+    Write-Log "Editions:       $($Cfg.Editions -join ', ')"
+    Write-Log "Base language:  $($Cfg.BaseLang)"
+    Write-Log "Language packs: $(if ($Cfg.LangPacks) { $Cfg.LangPacks -join ', ' } else { 'none' })"
+    Write-Log "Patches:        $(if ($Cfg.Patches) { ($Cfg.Patches | ForEach-Object { $Patches[$_].Label }) -join '; ' } else { 'none' })"
+    Write-Log "Source:         ISO folder $($Cfg.IsoFolder); UUP dump $(if ($Cfg.UseUup) { 'on' } else { 'off' }); always newest $(if ($Cfg.Newest) { 'on' } else { 'off' }); fast mode $(if ($Cfg.Fast) { 'on' } else { 'off' })"
+    Write-Log "Unattended:     $(if ($u.Enabled) { "user '$($u.UserName)', auto-install $($u.AutoInstall), edition '$($u.Edition)', $(if ($u.ProductKey) { 'own product key' } else { 'generic key' }), skip OOBE $($u.SkipOobe)" } else { 'off' })"
+    Write-Log "Output:         $($Cfg.Output)$(if ($Cfg.Split) { ' (install.wim split for FAT32)' })"
+}
+
+function Write-BuildSummary($Cfg) {
+    $r = $script:Report; $end = Get-Date
+    Write-Log '== Summary'
+    $result = if ($script:BuildSync.Error) { "FAILED in step $($script:BuildSync.Step): $($script:BuildSync.Error)" }
+    else { "OK - $($Cfg.Output) ($([math]::Round((Get-Item $Cfg.Output).Length/1GB,2)) GB)" }
+    Write-Log "Result:   $result"
+    Write-Log "Total:    $(Format-Duration ($end - $r.Start))"
+    for ($i = 0; $i -lt $r.Steps.Count; $i++) {
+        $next = if ($i + 1 -lt $r.Steps.Count) { $r.Steps[$i + 1].Start } else { $end }
+        Write-Log ('  {0,-30} {1}' -f $r.Steps[$i].Name, (Format-Duration ($next - $r.Steps[$i].Start)))
+    }
+    foreach ($img in $r.Images) { Write-Log "Image:    $img" }
+    Write-Log "Changes:  $($r.Apps) apps removed, $($r.Reg) registry values changed (all editions)"
+    $warnings = @($r.Warnings)
+    Write-Log "Warnings: $($warnings.Count)"
+    foreach ($w in $warnings) { Write-Log "  $w" }
 }
 
 function Get-Oscdimg {
@@ -68,12 +104,15 @@ function Invoke-Build($Cfg, $Sync) {
     New-Item -ItemType Directory -Force (Split-Path $Cfg.Output) | Out-Null
     $script:LogFile = Join-Path (Split-Path $Cfg.Output) 'build-log.txt'
     Set-Content $script:LogFile ''
+    $script:Report = @{ Start = Get-Date; Steps = @(); Images = @(); Apps = 0; Reg = 0; Warnings = @() }
     try {
+        Write-BuildHeader $Cfg
         Enter-Step 1 'Preflight'
         $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole('Administrators')
         if (-not $isAdmin) { throw 'Must run as administrator' }
         $free = (Get-PSDrive ($w.Substring(0, 1))).Free
         if ($free -lt 60GB) { throw "Need 60 GB free on $($w.Substring(0,2)), have $([math]::Round($free/1GB)) GB" }
+        Write-Log "Free space on $($w.Substring(0,2)): $([math]::Round($free/1GB)) GB"
         Clear-BuildState
         Clear-WindowsCorruptMountPoint | Out-Null
         if (Test-Path $w) { Remove-Item $w -Recurse -Force }
@@ -82,10 +121,13 @@ function Invoke-Build($Cfg, $Sync) {
         $peOcs = if ($Cfg.Unattend.Enabled -and $Cfg.Unattend.AutoInstall -eq 'BestSsd') { Get-WinPEOcs }
 
         Enter-Step 2 'Sources'
-        $base = Get-SourceIsos $Cfg.IsoFolder | Where-Object Lang -eq $Cfg.BaseLang | ForEach-Object {
+        $found = @(Get-SourceIsos $Cfg.IsoFolder | ForEach-Object {
             # Fast-mode UUP ISOs hold the older base build (e.g. 26100); the sidecar records the release they came from.
             if (Test-Path "$($_.Path).build") { $_.Build = (Get-Content "$($_.Path).build").Split('.')[0] }; $_
-        } | Sort-Object { [int]$_.Build } -Descending | Select-Object -First 1
+        })
+        foreach ($f in $found) { Write-Log "Found ISO $(Split-Path $f.Path -Leaf): build $($f.Build), $($f.Lang), $($f.Editions.Name -join ', ')" }
+        if (-not $found) { Write-Log "No ISOs in $($Cfg.IsoFolder)" }
+        $base = $found | Where-Object Lang -eq $Cfg.BaseLang | Sort-Object { [int]$_.Build } -Descending | Select-Object -First 1
         $builds = $null; $newest = $null
         if ($Cfg.UseUup -or $Cfg.LangPacks) {
             $builds = Get-UupBuilds
@@ -117,7 +159,9 @@ function Invoke-Build($Cfg, $Sync) {
         if ($missing) {
             Write-Log "Downloading via UUP dump: $($missing -join ', ') (this takes a while)"
             if ($Cfg.Fast) { Write-Log 'Fast mode: latest update not integrated (Windows Update installs it after setup)' }
+            $t = Get-Date
             $uupIso = Save-UupIso $uup.uuid $Cfg.BaseLang $missing "$w\uup" $Cfg.Fast
+            Write-Log "UUP download + conversion took $(Format-Duration ((Get-Date) - $t))"
             # Keep it with your ISOs so the next build reuses it instead of downloading again.
             New-Item -ItemType Directory -Force $Cfg.IsoFolder | Out-Null
             $uupIso = (Move-Item $uupIso $Cfg.IsoFolder -Force -PassThru).FullName
@@ -138,6 +182,7 @@ function Invoke-Build($Cfg, $Sync) {
         foreach ($lang in $Cfg.LangPacks | Where-Object { $_ -ne $Cfg.BaseLang }) {
             Write-Log "Language pack $lang"
             $lps += Save-UupLanguagePack $uup.uuid $lang "$($Cfg.CacheDir)\$($uup.uuid)"
+            Write-Log " build $($lps[-1].Build), features: $(if ($lps[-1].Capabilities) { $lps[-1].Capabilities -join ', ' } else { 'none' })"
         }
 
         Enter-Step 3 'Editions'
@@ -166,6 +211,7 @@ function Invoke-Build($Cfg, $Sync) {
             Invoke-Patches "$w\mount" $Cfg.Patches $Cfg
             # ponytail: no StartComponentCleanup here (slow, small gain); the max-compression export in step 7 shrinks the image.
             Dismount-WindowsImage -Path "$w\mount" -Save | Out-Null
+            Write-Log "Saved $($img.ImageName)"
         }
 
         Enter-Step 5 'Setup (boot.wim)'
@@ -197,6 +243,13 @@ function Invoke-Build($Cfg, $Sync) {
             Write-Log "Export $($img.ImageName) (max compression)"
             Export-WindowsImage -SourceImagePath "$w\install.wim" -SourceIndex $img.ImageIndex -DestinationImagePath "$w\iso\sources\install.wim" -CompressionType max | Out-Null
         }
+        # Read back the final image so the report shows what actually ended up in it.
+        foreach ($img in Get-WindowsImage -ImagePath "$w\iso\sources\install.wim") {
+            $d = Get-WindowsImage -ImagePath "$w\iso\sources\install.wim" -Index $img.ImageIndex
+            $script:Report.Images += "$($d.ImageName) - version $($d.Version), languages $($d.Languages -join ', '), $([math]::Round($d.ImageSize/1GB,1)) GB installed"
+            Write-Log " $($script:Report.Images[-1])"
+        }
+        Write-Log "install.wim: $([math]::Round((Get-Item "$w\iso\sources\install.wim").Length/1GB,2)) GB"
         if ($Cfg.Split) {
             Split-WindowsImage -ImagePath "$w\iso\sources\install.wim" -SplitImagePath "$w\iso\sources\install.swm" -FileSize 3800 | Out-Null
             Remove-Item "$w\iso\sources\install.wim"
@@ -223,6 +276,7 @@ function Invoke-Build($Cfg, $Sync) {
         Write-Log "Work folder kept for inspection: $w"
     } finally {
         try { Clear-BuildState } catch { Write-Log "Cleanup warning: $_" }
+        try { Write-BuildSummary $Cfg } catch { Write-Log "Summary failed: $_" }
         $Sync.Done = $true
     }
 }

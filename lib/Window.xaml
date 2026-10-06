@@ -22,6 +22,16 @@
     <Style x:Key="Hint" TargetType="TextBlock"><Setter Property="FontSize" Value="12"/><Setter Property="Foreground" Value="{StaticResource Muted}"/><Setter Property="TextWrapping" Value="Wrap"/><Setter Property="Margin" Value="0,6,0,0"/></Style>
     <Style x:Key="Label" TargetType="TextBlock"><Setter Property="Width" Value="120"/><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Foreground" Value="{StaticResource Muted}"/></Style>
     <Style x:Key="Card" TargetType="Border"><Setter Property="Background" Value="{StaticResource CardBg}"/><Setter Property="BorderBrush" Value="{StaticResource Line}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="CornerRadius" Value="10"/><Setter Property="Padding" Value="18,16"/><Setter Property="Margin" Value="0,0,0,14"/></Style>
+    <!-- Page enter animation: fade + small slide up -->
+    <Style x:Key="Page" TargetType="FrameworkElement">
+      <Setter Property="RenderTransform"><Setter.Value><TranslateTransform/></Setter.Value></Setter>
+      <Style.Triggers>
+        <Trigger Property="Visibility" Value="Visible"><Trigger.EnterActions><BeginStoryboard><Storyboard>
+          <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.22" DecelerationRatio="1"/>
+          <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="12" To="0" Duration="0:0:0.28" DecelerationRatio="1"/>
+        </Storyboard></BeginStoryboard></Trigger.EnterActions></Trigger>
+      </Style.Triggers>
+    </Style>
     <Style x:Key="Row" TargetType="StackPanel"><Setter Property="Orientation" Value="Horizontal"/><Setter Property="Margin" Value="0,0,0,10"/></Style>
 
     <Style TargetType="TextBox">
@@ -48,10 +58,11 @@
       <Setter Property="Background" Value="#232834"/><Setter Property="Foreground" Value="{StaticResource Text}"/>
       <Setter Property="Padding" Value="14,7"/><Setter Property="Margin" Value="8,0,0,0"/><Setter Property="Cursor" Value="Hand"/>
       <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
-        <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}" BorderBrush="{StaticResource Line}" BorderThickness="1">
+        <Grid><Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}" BorderBrush="{StaticResource Line}" BorderThickness="1">
           <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+          <Border x:Name="hl" CornerRadius="6" Background="White" Opacity="0" IsHitTestVisible="False"/></Grid>
         <ControlTemplate.Triggers>
-          <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#2C3341"/></Trigger>
+          <Trigger Property="IsMouseOver" Value="True"><Trigger.EnterActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="hl" Storyboard.TargetProperty="Opacity" To="0.07" Duration="0:0:0.15"/></Storyboard></BeginStoryboard></Trigger.EnterActions><Trigger.ExitActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="hl" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.25"/></Storyboard></BeginStoryboard></Trigger.ExitActions></Trigger>
           <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
         </ControlTemplate.Triggers>
       </ControlTemplate></Setter.Value></Setter>
@@ -60,10 +71,11 @@
       <Setter Property="FontSize" Value="15"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Padding" Value="28,11"/><Setter Property="Margin" Value="0"/>
       <Setter Property="Foreground" Value="White"/>
       <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
-        <Border x:Name="b" Background="{StaticResource Accent}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+        <Grid><Border x:Name="b" Background="{StaticResource Accent}" CornerRadius="8" Padding="{TemplateBinding Padding}">
           <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+          <Border x:Name="hl" CornerRadius="8" Background="White" Opacity="0" IsHitTestVisible="False"/></Grid>
         <ControlTemplate.Triggers>
-          <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource AccentHover}"/></Trigger>
+          <Trigger Property="IsMouseOver" Value="True"><Trigger.EnterActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="hl" Storyboard.TargetProperty="Opacity" To="0.14" Duration="0:0:0.15"/></Storyboard></BeginStoryboard></Trigger.EnterActions><Trigger.ExitActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="hl" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.25"/></Storyboard></BeginStoryboard></Trigger.ExitActions></Trigger>
           <Trigger Property="Tag" Value="cancel"><Setter TargetName="b" Property="Background" Value="#B84545"/></Trigger>
           <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
         </ControlTemplate.Triggers>
@@ -76,13 +88,14 @@
       <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="CheckBox">
         <StackPanel Orientation="Horizontal" Background="Transparent">
           <Border x:Name="track" Width="38" Height="20" CornerRadius="10" Background="#2A303C" VerticalAlignment="Center">
-            <Ellipse x:Name="thumb" Width="14" Height="14" Fill="#C9CED6" HorizontalAlignment="Left" Margin="3,0"/></Border>
+            <Ellipse x:Name="thumb" Width="14" Height="14" Fill="#C9CED6" HorizontalAlignment="Left" Margin="3,0">
+              <Ellipse.RenderTransform><TranslateTransform x:Name="slide"/></Ellipse.RenderTransform></Ellipse></Border>
           <ContentPresenter Margin="12,0,0,0" VerticalAlignment="Center"/>
         </StackPanel>
         <ControlTemplate.Triggers>
           <Trigger Property="IsChecked" Value="True">
-            <Setter TargetName="track" Property="Background" Value="{StaticResource Accent}"/>
-            <Setter TargetName="thumb" Property="HorizontalAlignment" Value="Right"/><Setter TargetName="thumb" Property="Fill" Value="White"/>
+            <Trigger.EnterActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="slide" Storyboard.TargetProperty="X" To="18" Duration="0:0:0.18" DecelerationRatio="1"/><ColorAnimation Storyboard.TargetName="track" Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)" To="#4F8CFF" Duration="0:0:0.18"/><ColorAnimation Storyboard.TargetName="thumb" Storyboard.TargetProperty="(Shape.Fill).(SolidColorBrush.Color)" To="White" Duration="0:0:0.18"/></Storyboard></BeginStoryboard></Trigger.EnterActions>
+            <Trigger.ExitActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="slide" Storyboard.TargetProperty="X" To="0" Duration="0:0:0.18" DecelerationRatio="1"/><ColorAnimation Storyboard.TargetName="track" Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)" To="#2A303C" Duration="0:0:0.18"/><ColorAnimation Storyboard.TargetName="thumb" Storyboard.TargetProperty="(Shape.Fill).(SolidColorBrush.Color)" To="#C9CED6" Duration="0:0:0.18"/></Storyboard></BeginStoryboard></Trigger.ExitActions>
           </Trigger>
           <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger>
         </ControlTemplate.Triggers>
@@ -93,9 +106,12 @@
     <Style x:Key="Chip" TargetType="CheckBox">
       <Setter Property="Foreground" Value="{StaticResource Text}"/><Setter Property="Margin" Value="0,0,8,8"/><Setter Property="Cursor" Value="Hand"/>
       <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="CheckBox">
-        <Border x:Name="b" CornerRadius="14" Padding="12,5" Background="#202530" BorderBrush="{StaticResource Line}" BorderThickness="1">
+        <Grid><Border x:Name="b" CornerRadius="14" Padding="12,5" Background="#202530" BorderBrush="{StaticResource Line}" BorderThickness="1">
           <ContentPresenter/></Border>
+          <Border x:Name="hl" CornerRadius="14" Background="White" Opacity="0" IsHitTestVisible="False"/></Grid>
         <ControlTemplate.Triggers>
+          <Trigger Property="IsMouseOver" Value="True"><Trigger.EnterActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="hl" Storyboard.TargetProperty="Opacity" To="0.06" Duration="0:0:0.15"/></Storyboard></BeginStoryboard></Trigger.EnterActions><Trigger.ExitActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="hl" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.25"/></Storyboard></BeginStoryboard></Trigger.ExitActions></Trigger>
+
           <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger>
           <Trigger Property="IsChecked" Value="True"><Setter TargetName="b" Property="Background" Value="{StaticResource Accent}"/><Setter TargetName="b" Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger>
         </ControlTemplate.Triggers>
@@ -138,12 +154,13 @@
       <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
         <Border x:Name="b" CornerRadius="6" Padding="14,9" Margin="10,2" Background="Transparent">
           <StackPanel Orientation="Horizontal">
-            <Border x:Name="bar" Width="3" Height="16" CornerRadius="2" Background="Transparent" Margin="0,0,12,0"/>
+            <Border x:Name="bar" Width="3" Height="0" CornerRadius="2" Background="{StaticResource Accent}" Margin="0,0,12,0"/>
             <ContentPresenter VerticalAlignment="Center"/></StackPanel></Border>
         <ControlTemplate.Triggers>
           <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#1C2029"/></Trigger>
           <Trigger Property="IsSelected" Value="True">
-            <Setter TargetName="b" Property="Background" Value="#1F2633"/><Setter TargetName="bar" Property="Background" Value="{StaticResource Accent}"/>
+            <Trigger.EnterActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="bar" Storyboard.TargetProperty="Height" To="16" Duration="0:0:0.2" DecelerationRatio="1"/></Storyboard></BeginStoryboard></Trigger.EnterActions><Trigger.ExitActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="bar" Storyboard.TargetProperty="Height" To="0" Duration="0:0:0.2" DecelerationRatio="1"/></Storyboard></BeginStoryboard></Trigger.ExitActions>
+            <Setter TargetName="b" Property="Background" Value="#1F2633"/>
             <Setter Property="Foreground" Value="{StaticResource Text}"/></Trigger>
         </ControlTemplate.Triggers>
       </ControlTemplate></Setter.Value></Setter>
@@ -201,7 +218,7 @@
 
     <Grid Grid.Column="1">
       <!-- Source -->
-      <ScrollViewer x:Name="PageSource" VerticalScrollBarVisibility="Auto"><StackPanel Margin="36,30,36,30">
+      <ScrollViewer x:Name="PageSource" Style="{StaticResource Page}" VerticalScrollBarVisibility="Auto"><StackPanel Margin="36,30,36,30">
         <TextBlock Text="Source" Style="{StaticResource H1}"/>
         <TextBlock Text="Where the Windows files come from. Your own official ISOs are used first; anything missing can be downloaded from UUP dump." Style="{StaticResource Sub}"/>
         <Border Style="{StaticResource Card}"><StackPanel>
@@ -216,7 +233,7 @@
           <TextBlock Text="UUP DUMP" Style="{StaticResource Section}"/>
           <CheckBox x:Name="UseUup" Style="{StaticResource Toggle}" Content="Download missing editions via UUP dump" IsChecked="True"/>
           <CheckBox x:Name="Newest" Style="{StaticResource Toggle}" Content="Always use the newest Windows (download it if your ISO is an older version)" IsChecked="True"/>
-          <CheckBox x:Name="Fast" Style="{StaticResource Toggle}" Content="Fast mode: ~15 min instead of ~60, but the ISO holds the older base build; Windows Update brings it up to date after setup" IsChecked="True"/>
+          <CheckBox x:Name="Fast" Style="{StaticResource Toggle}" Content="Fast mode: ~15 min instead of ~60 (older base build; Windows Update updates it after setup)" IsChecked="True"/>
           <TextBlock x:Name="NewestText" Style="{StaticResource Hint}" Margin="0,0,0,12" Text="Newest available: unknown (offline)"/>
           <StackPanel Style="{StaticResource Row}"><TextBlock Text="Build" Style="{StaticResource Label}"/><ComboBox x:Name="Build" Width="380"/></StackPanel>
           <TextBlock Style="{StaticResource Hint}" Text="Language packs always come from UUP dump and must match the image build. Auto picks the newest matching build."/>
@@ -224,7 +241,7 @@
       </StackPanel></ScrollViewer>
 
       <!-- Languages -->
-      <ScrollViewer x:Name="PageLanguages" Visibility="Collapsed" VerticalScrollBarVisibility="Auto"><StackPanel Margin="36,30,36,30">
+      <ScrollViewer x:Name="PageLanguages" Style="{StaticResource Page}" Visibility="Collapsed" VerticalScrollBarVisibility="Auto"><StackPanel Margin="36,30,36,30">
         <TextBlock Text="Languages" Style="{StaticResource H1}"/>
         <TextBlock Text="The base language is what setup and the image are built in. Every language pack you pick is added to every edition." Style="{StaticResource Sub}"/>
         <Border Style="{StaticResource Card}"><StackPanel>
@@ -238,14 +255,14 @@
       </StackPanel></ScrollViewer>
 
       <!-- Editions -->
-      <ScrollViewer x:Name="PageEditions" Visibility="Collapsed" VerticalScrollBarVisibility="Auto"><StackPanel Margin="36,30,36,30">
+      <ScrollViewer x:Name="PageEditions" Style="{StaticResource Page}" Visibility="Collapsed" VerticalScrollBarVisibility="Auto"><StackPanel Margin="36,30,36,30">
         <TextBlock Text="Editions" Style="{StaticResource H1}"/>
         <TextBlock Text="Editions found in your ISO for the base language. Ones marked UUP are built via UUP dump." Style="{StaticResource Sub}"/>
         <Border Style="{StaticResource Card}"><WrapPanel x:Name="EditionPanel"/></Border>
       </StackPanel></ScrollViewer>
 
       <!-- Patches -->
-      <ScrollViewer x:Name="PagePatches" Visibility="Collapsed" VerticalScrollBarVisibility="Auto"><StackPanel Margin="36,30,36,30">
+      <ScrollViewer x:Name="PagePatches" Style="{StaticResource Page}" Visibility="Collapsed" VerticalScrollBarVisibility="Auto"><StackPanel Margin="36,30,36,30">
         <TextBlock Text="Patches" Style="{StaticResource H1}"/>
         <TextBlock Text="CTT Win11 Creator style tweaks, applied to every edition. Essential apps (Store, winget, Calculator, Photos, Xbox login, Game Bar...) are always protected." Style="{StaticResource Sub}"/>
         <UniformGrid x:Name="PatchPanel" Columns="2"/>
@@ -257,7 +274,7 @@
       </StackPanel></ScrollViewer>
 
       <!-- Unattended -->
-      <ScrollViewer x:Name="PageUnattended" Visibility="Collapsed" VerticalScrollBarVisibility="Auto"><StackPanel Margin="36,30,36,30">
+      <ScrollViewer x:Name="PageUnattended" Style="{StaticResource Page}" Visibility="Collapsed" VerticalScrollBarVisibility="Auto"><StackPanel Margin="36,30,36,30">
         <TextBlock Text="Unattended" Style="{StaticResource H1}"/>
         <TextBlock Text="Generates autounattend.xml so setup answers its own questions." Style="{StaticResource Sub}"/>
         <CheckBox x:Name="UnattendOn" Style="{StaticResource Toggle}" Content="Enable autounattend.xml" Margin="0,0,0,16"/>
@@ -305,7 +322,7 @@
       </StackPanel></ScrollViewer>
 
       <!-- Build -->
-      <Grid x:Name="PageBuild" Visibility="Collapsed" Margin="36,30,36,30">
+      <Grid x:Name="PageBuild" Style="{StaticResource Page}" Visibility="Collapsed" Margin="36,30,36,30">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
         <StackPanel><TextBlock Text="Build" Style="{StaticResource H1}"/>
           <TextBlock Text="Needs about 60 GB free on the project drive. A full build takes a while - the log shows every step." Style="{StaticResource Sub}"/></StackPanel>

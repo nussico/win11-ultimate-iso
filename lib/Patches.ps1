@@ -106,6 +106,7 @@ function Remove-Apps($Mount, [string[]]$Wanted) {
         $prov | Where-Object DisplayName -eq $name | ForEach-Object {
             Write-Log "  remove app $name"
             Remove-AppxProvisionedPackage -Path $Mount -PackageName $_.PackageName | Out-Null
+            if ($script:Report) { $script:Report.Apps++ }
         }
     }
 }
@@ -144,8 +145,9 @@ function Set-OfflineReg([string[]]$Entries) {
     foreach ($e in $Entries) {
         $path, $name, $value = $e -split '\|'
         $key = Convert-RegPath $path
-        if ($value -eq '-') { reg delete $key /v $name /f 2>&1 | Out-Null }
-        else { reg add $key /v $name /t REG_DWORD /d $value /f 2>&1 | Out-Null; if ($LASTEXITCODE) { throw "reg add failed: $e" } }
+        if ($value -eq '-') { reg delete $key /v $name /f 2>&1 | Out-Null; Write-Log "  reg delete $path\$name" }
+        else { reg add $key /v $name /t REG_DWORD /d $value /f 2>&1 | Out-Null; if ($LASTEXITCODE) { throw "reg add failed: $e" }; Write-Log "  reg $path\$name = $value" }
+        if ($script:Report) { $script:Report.Reg++ }
     }
 }
 
@@ -154,12 +156,12 @@ function Set-OfflineReg([string[]]$Entries) {
 function Get-PatchReg([string[]]$Ids) { @($Ids | ForEach-Object { $Patches[$_].Reg } | Where-Object { $_ }) }
 
 function Invoke-Patches($Mount, [string[]]$Ids, $Cfg) {
-    if ($Ids -contains 'bloatapps') { Write-Log ' patch bloatapps'; & $Patches.bloatapps.Action $Mount $Cfg }
-    if ($Ids -contains 'xboxapp') { Write-Log ' patch xboxapp'; & $Patches.xboxapp.Action $Mount $Cfg }
+    foreach ($id in 'bloatapps', 'xboxapp' | Where-Object { $_ -in $Ids }) { Write-Log " patch $id - $($Patches[$id].Label)"; & $Patches[$id].Action $Mount $Cfg }
+    Write-Log " registry: $(($Ids | Where-Object { $Patches[$_].Reg }) -join ', ')"
     Mount-Hives $Mount
     try { Set-OfflineReg (Get-PatchReg $Ids) } finally { Dismount-Hives }
     foreach ($id in $Ids | Where-Object { $_ -notin 'bloatapps', 'xboxapp' -and $Patches[$_].Action }) {
-        Write-Log " patch $id"; & $Patches[$id].Action $Mount $Cfg
+        Write-Log " patch $id - $($Patches[$id].Label)"; & $Patches[$id].Action $Mount $Cfg
     }
 }
 
