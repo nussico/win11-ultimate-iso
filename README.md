@@ -41,6 +41,7 @@ Manual: download the repo ZIP, extract, right-click `Builder.ps1` -> *Run with P
   - Aggressive: remove Edge (keeps WebView2), disable Defender, disable Recall
   - Extras: inject drivers, CTT WinUtil shortcut
 - **Unattended**: local account (default `User`), timezone, keyboard, skip OOBE, product key, run WinUtil or your own script after first login.
+- **Version stamp**: every ISO is named `W11U_<version>` (shown in Explorer and on the USB stick) and has a `Win11Ultimate.txt` saying which builder version made it and with which editions and patches.
 - **Build plan**: the Build page shows what will happen before you start (reuse or download, time, disk space). Taskbar progress, and the window flashes when done.
 - **Storage**: sizes of ISOs, builds and leftovers; *Clean up* deletes temp files and outdated downloads (never your own ISOs).
 - **Test in VM**: one click creates a Hyper-V VM (no TPM, so it tests the bypasses) that boots the built ISO.

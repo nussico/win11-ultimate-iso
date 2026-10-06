@@ -68,7 +68,9 @@ try {
     if ($latest -and $latest.Trim() -ne $have) { $ui.UpdateBtn.Visibility = 'Visible' }
 } catch { }   # manual install, offline or rate-limited: no button
 # --- Info page ---
-$ui.InfoVersion.Text = if (Test-Path "$root\version.txt") { (Get-Content "$root\version.txt" -Raw).Trim() -replace '^(.{7}).*', '$1' } else { 'dev copy (not installed with install.ps1)' }
+# Short commit from install.ps1, stamped on every ISO (label, Win11Ultimate.txt, log); 'dev' for a git checkout.
+$toolVersion = if (Test-Path "$root\version.txt") { (Get-Content "$root\version.txt" -Raw).Trim() -replace '^(.{7}).*', '$1' } else { 'dev' }
+$ui.InfoVersion.Text = if ($toolVersion -eq 'dev') { 'dev copy (not installed with install.ps1)' } else { $toolVersion }
 $ui.InfoFolder.Text = $root
 $ui.OpenGitHub.Add_Click({ Start-Process "https://github.com/$repo" })
 $ui.OpenFolder.Add_Click({ Start-Process explorer.exe $root })
@@ -226,7 +228,7 @@ function Get-Config {
             ProductKey = $ui.ProductKey.Text.Trim().ToUpper(); AutoInstall = [string]$ui.AutoInstall.SelectedItem.Tag
             RunWinUtil = [bool]$ui.RunWinUtil.IsChecked; CustomScript = $ui.CustomScript.Text; EnableAdmin = [bool]$ui.EnableAdmin.IsChecked
         }
-        Output = $ui.Output.Text; Split = [bool]$ui.Split.IsChecked; QuickCompress = [bool]$ui.QuickCompress.IsChecked; DefenderExclude = [bool]$ui.DefenderExclude.IsChecked; WorkDir = "$root\work"; CacheDir = "$root\cache"
+        Output = $ui.Output.Text; Split = [bool]$ui.Split.IsChecked; QuickCompress = [bool]$ui.QuickCompress.IsChecked; DefenderExclude = [bool]$ui.DefenderExclude.IsChecked; WorkDir = "$root\work"; CacheDir = "$root\cache"; ToolVersion = $toolVersion
     }
 }
 

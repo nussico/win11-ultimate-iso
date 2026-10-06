@@ -118,6 +118,15 @@ Assert ($q.Body -match 'updates=0' -and $q.Updates -eq 0 -and $q.Edition -eq 'PR
 $q = Get-UupRequest @('Windows 11 Home', 'Windows 11 Enterprise') $false
 Assert ($q.Body -match 'updates=1' -and $q.Edition -eq 'CORE;PROFESSIONAL' -and $q.Body -match 'autodl=3' -and $q.Body -match 'virtualEditions\[\]=Enterprise') 'Normal mode + virtual edition adds Pro base'
 
+# ISO version stamp (Build.ps1 loaded in a child scope so its Write-Log stays out of the way)
+& {
+    . "$root\lib\Build.ps1"
+    Assert ((Get-IsoLabel '99cfb89') -eq 'W11U_99CFB89' -and (Get-IsoLabel '') -eq 'W11U_DEV' -and (Get-IsoLabel 'a b-c!') -eq 'W11U_ABC') 'ISO label: W11U_<version>, safe characters only'
+    $t = Get-IsoInfoText @{ ToolVersion = '99cfb89'; Editions = @('Windows 11 Pro'); BaseLang = 'de-de'; Patches = @('hwchecks')
+        Unattend = @{ Enabled = $true; AutoInstall = 'BestSsd'; Password = 'secret1'; ProductKey = 'AAAAA-BBBBB-CCCCC-DDDDD-EEEEE' } }
+    Assert ($t -match 'Builder 99cfb89' -and $t -match 'Windows 11 Pro' -and $t -notmatch 'secret1|AAAAA') 'Win11Ultimate.txt: version + choices, no secrets'
+}
+
 # Background build wiring (same pattern as Builder.ps1). Cancel is preset, so nothing is built.
 $sync = [hashtable]::Synchronized(@{ Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]'; Step = 0; Cancel = $true; Done = $false; Error = $null })
 $ps = [powershell]::Create()

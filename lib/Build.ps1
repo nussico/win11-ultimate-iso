@@ -24,7 +24,7 @@ function Format-Duration([timespan]$T) { '{0}m {1:00}s' -f [int][math]::Floor($T
 
 function Write-BuildHeader($Cfg) {
     $u = $Cfg.Unattend
-    Write-Log "Win11 Ultimate Builder - build started $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+    Write-Log "Win11 Ultimate Builder $($Cfg.ToolVersion) - build started $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
     Write-Log "Host:           $((Get-CimInstance Win32_OperatingSystem).Caption) $([Environment]::OSVersion.Version), PowerShell $($PSVersionTable.PSVersion)"
     Write-Log "Editions:       $($Cfg.Editions -join ', ')"
     Write-Log "Base language:  $($Cfg.BaseLang)"
@@ -61,6 +61,25 @@ function Get-Oscdimg {
     winget install -e --id Microsoft.WindowsADK --accept-package-agreements --accept-source-agreements --override '/quiet /norestart /features OptionId.DeploymentTools' | Out-Null
     if (Test-Path $p) { return $p }
     throw 'oscdimg missing. Install the Windows ADK "Deployment Tools" feature and retry.'
+}
+
+# Volume label W11U_<version> (letters/digits only; a short commit keeps it far below the 32-char limit).
+function Get-IsoLabel($Version) {
+    $v = "$Version" -replace '[^A-Za-z0-9]', ''
+    "W11U_$(if ($v) { $v } else { 'dev' })".ToUpper()
+}
+
+# Text file in the ISO root: which builder version made it and with what. No password or product key.
+function Get-IsoInfoText($Cfg) {
+    @(
+        "Built with Win11 Ultimate ISO Builder $($Cfg.ToolVersion) on $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+        'https://github.com/nussico/win11-ultimate-iso'
+        ''
+        "Editions:   $($Cfg.Editions -join ', ')"
+        "Language:   $($Cfg.BaseLang)"
+        "Patches:    $(if ($Cfg.Patches) { $Cfg.Patches -join ', ' } else { 'none' })"
+        "Unattended: $(if ($Cfg.Unattend.Enabled) { "yes, automatic install $($Cfg.Unattend.AutoInstall)" } else { 'no' })"
+    ) -join "`r`n"
 }
 
 function Mount-SourceIso($Path) { $script:MountedIsos += $Path; Mount-Iso $Path }
@@ -227,10 +246,14 @@ function Invoke-Build($Cfg, $Sync) {
 
         Enter-Step 8 'Create ISO'
         if (Test-Path $Cfg.Output) { Remove-Item $Cfg.Output }
+        # Mark the ISO with the builder version: volume label (shown in Explorer / on a Rufus stick) + info file.
+        $label = Get-IsoLabel $Cfg.ToolVersion
+        Set-Content "$w\iso\Win11Ultimate.txt" (Get-IsoInfoText $Cfg)
+        Write-Log "ISO label $label, Win11Ultimate.txt added"
         $boot = "2#p0,e,b$w\iso\boot\etfsboot.com#pEF,e,b$w\iso\efi\microsoft\boot\efisys.bin"
         $ErrorActionPreference = 'Continue'   # oscdimg writes progress to stderr
         Write-Log "Writing $($Cfg.Output) - takes 1-3 minutes"
-        $out = & $oscdimg -m -o -u2 -udfver102 "-bootdata:$boot" -lWIN11_ULTIMATE "$w\iso" $Cfg.Output 2>&1
+        $out = & $oscdimg -m -o -u2 -udfver102 "-bootdata:$boot" "-l$label" "$w\iso" $Cfg.Output 2>&1
         if ($LASTEXITCODE) {
             $out | Where-Object { "$_" -notmatch '% complete' } | Select-Object -Last 5 | ForEach-Object { Write-Log " oscdimg: $_" }
             throw "oscdimg failed ($LASTEXITCODE)"
