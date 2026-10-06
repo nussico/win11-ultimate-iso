@@ -27,6 +27,12 @@ Assert (-not ($Patches.Values.Reg | Where-Object { $_ -and $_ -notmatch '^(SYSTE
 $reg = Get-PatchReg $Presets.Recommended.Patches
 Assert ($reg.Count -gt 0 -and -not ($reg | Where-Object { -not $_ -or $_ -notmatch '\|' })) 'Get-PatchReg: no empty entries for patches without Reg (bloatapps)'
 
+function Write-Log($Msg) { $script:logged += "$Msg`n" }
+$tmp = New-Item -ItemType Directory -Force "$env:TEMP\w11rmtest"; 'x' | Set-Content "$tmp\file.exe"; New-Item -ItemType Directory -Force "$tmp\dir\sub" | Out-Null
+$script:logged = ''; Remove-ImagePath "$tmp\file.exe"; Remove-ImagePath "$tmp\dir"
+Assert (-not (Test-Path "$tmp\file.exe") -and -not (Test-Path "$tmp\dir") -and $script:logged -notmatch 'not a valid directory') 'Remove-ImagePath: single file and folder'
+Remove-Item $tmp -Recurse -Force
+
 # Unattend
 $u = @{ UserName = 'User'; Password = 'p<w'; Admin = $true; AutoLogon = $true; ComputerName = ''; TimeZone = 'W. Europe Standard Time'
     Keyboard = 'de-DE'; Locale = 'de-DE'; SkipOobe = $true; Edition = 'Windows 11 Pro'; AutoInstall = 'Off'; RunWinUtil = $true; CustomScript = ''; EnableAdmin = $false }

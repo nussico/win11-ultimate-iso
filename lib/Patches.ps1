@@ -114,10 +114,14 @@ function Remove-Apps($Mount, [string[]]$Wanted) {
 function Remove-ImagePath($Path) {
     $ErrorActionPreference = 'Continue'   # native tools below write to stderr
     if (-not (Test-Path $Path)) { return }
-    takeown /f $Path /r /d y /a 2>&1 | Out-Null
+    # takeown /r only accepts folders; on a file it fails and the delete is then denied.
+    $own = if (Test-Path $Path -PathType Container) { @('/r', '/d', 'y') } else { @() }
+    $out = takeown /f $Path @own /a 2>&1
+    if ($LASTEXITCODE) { Write-Log "  WARN takeown failed for ${Path}: $out" }
     icacls $Path /grant '*S-1-5-32-544:F' /t /c /q 2>&1 | Out-Null
-    Remove-Item $Path -Recurse -Force -ErrorAction Stop
-    Write-Log "  deleted $Path"
+    # Leftover files are not worth failing a whole build over: warn and continue.
+    try { Remove-Item $Path -Recurse -Force -ErrorAction Stop; Write-Log "  deleted $Path" }
+    catch { Write-Log "  WARN could not delete ${Path}: $($_.Exception.Message)" }
 }
 
 # Native tools: Windows PowerShell 5.1 turns their stderr into terminating errors under
