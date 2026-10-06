@@ -207,7 +207,6 @@
         </StackPanel>
         <ListBox x:Name="Nav" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource Nav}">
           <ListBoxItem Content="Source" Tag="PageSource" IsSelected="True"/>
-          <ListBoxItem Content="Languages" Tag="PageLanguages"/>
           <ListBoxItem Content="Editions" Tag="PageEditions"/>
           <ListBoxItem Content="Patches" Tag="PagePatches"/>
           <ListBoxItem Content="Unattended" Tag="PageUnattended"/>
@@ -221,6 +220,11 @@
       <ScrollViewer x:Name="PageSource" Style="{StaticResource Page}" VerticalScrollBarVisibility="Auto"><StackPanel Margin="36,30,36,30">
         <TextBlock Text="Source" Style="{StaticResource H1}"/>
         <TextBlock Text="Where the Windows files come from. Your own official ISOs are used first; anything missing can be downloaded from UUP dump." Style="{StaticResource Sub}"/>
+        <Border Style="{StaticResource Card}"><StackPanel>
+          <TextBlock Text="LANGUAGE" Style="{StaticResource Section}"/>
+          <ComboBox x:Name="BaseLang" Width="220" HorizontalAlignment="Left"/>
+          <TextBlock Style="{StaticResource Hint}" Text="The ISO is built in this one language: setup and Windows. Keyboard and formats can be set on the Unattended page."/>
+        </StackPanel></Border>
         <Border Style="{StaticResource Card}"><StackPanel>
           <TextBlock Text="YOUR ISOS" Style="{StaticResource Section}"/>
           <DockPanel>
@@ -237,16 +241,6 @@
           <TextBlock x:Name="NewestText" Style="{StaticResource Hint}" Margin="0,0,0,12" Text="Newest available: unknown (offline)"/>
           <StackPanel Style="{StaticResource Row}"><TextBlock Text="Build" Style="{StaticResource Label}"/><ComboBox x:Name="Build" Width="380"/></StackPanel>
           <TextBlock Style="{StaticResource Hint}" Text="Auto picks the newest build matching your ISO."/>
-        </StackPanel></Border>
-      </StackPanel></ScrollViewer>
-
-      <!-- Languages -->
-      <ScrollViewer x:Name="PageLanguages" Style="{StaticResource Page}" Visibility="Collapsed" VerticalScrollBarVisibility="Auto"><StackPanel Margin="36,30,36,30">
-        <TextBlock Text="Languages" Style="{StaticResource H1}"/>
-        <TextBlock Text="The ISO is built in this one language: setup and Windows. Keyboard and formats can still be set on the Unattended page." Style="{StaticResource Sub}"/>
-        <Border Style="{StaticResource Card}"><StackPanel>
-          <TextBlock Text="BASE LANGUAGE" Style="{StaticResource Section}"/>
-          <ComboBox x:Name="BaseLang" Width="200" HorizontalAlignment="Left"/>
         </StackPanel></Border>
       </StackPanel></ScrollViewer>
 
