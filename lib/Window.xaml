@@ -13,6 +13,14 @@
     <SolidColorBrush x:Key="Muted" Color="#8B93A1"/>
     <SolidColorBrush x:Key="Accent" Color="#4F8CFF"/>
     <SolidColorBrush x:Key="AccentHover" Color="#6FA1FF"/>
+    <!-- App logo (sidebar + window/taskbar icon): three window panes and a disc for the ISO -->
+    <DrawingImage x:Key="Logo"><DrawingImage.Drawing><DrawingGroup>
+      <GeometryDrawing Brush="#4F8CFF" Geometry="M7,0 H25 A7,7 0 0 1 32,7 V25 A7,7 0 0 1 25,32 H7 A7,7 0 0 1 0,25 V7 A7,7 0 0 1 7,0 Z"/>
+      <GeometryDrawing Brush="White" Geometry="M7,7 H15 V15 H7 Z M17,7 H25 V15 H17 Z M7,17 H15 V25 H7 Z"/>
+      <GeometryDrawing Brush="White"><GeometryDrawing.Geometry><GeometryGroup FillRule="EvenOdd">
+        <EllipseGeometry Center="21,21" RadiusX="4.6" RadiusY="4.6"/><EllipseGeometry Center="21,21" RadiusX="1.4" RadiusY="1.4"/>
+      </GeometryGroup></GeometryDrawing.Geometry></GeometryDrawing>
+    </DrawingGroup></DrawingImage.Drawing></DrawingImage>
     <SolidColorBrush x:Key="Danger" Color="#F87171"/>
 
     <Style TargetType="TextBlock"><Setter Property="Foreground" Value="{StaticResource Text}"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
@@ -194,8 +202,7 @@
       <DockPanel>
         <StackPanel DockPanel.Dock="Top" Margin="24,26,20,24">
           <StackPanel Orientation="Horizontal">
-            <Border Width="30" Height="30" CornerRadius="7" Background="{StaticResource Accent}" Margin="0,0,10,0">
-              <TextBlock Text="W" FontWeight="Bold" FontSize="16" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+            <Image Source="{StaticResource Logo}" Width="30" Height="30" Margin="0,0,10,0"/>
             <StackPanel><TextBlock Text="Win11 Ultimate" FontWeight="SemiBold" FontSize="15"/>
               <TextBlock Text="ISO Builder" FontSize="12" Foreground="{StaticResource Muted}"/></StackPanel>
           </StackPanel>

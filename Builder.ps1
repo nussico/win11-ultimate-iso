@@ -32,6 +32,7 @@ function Write-Log($Msg) { }   # lib helpers log during builds; nothing to log i
 
 # Taskbar progress + flash when a build ends (until the window is focused).
 $win.TaskbarItemInfo = New-Object Windows.Shell.TaskbarItemInfo
+$win.Icon = $win.FindResource('Logo')
 Add-Type -Namespace W11 -Name Native -MemberDefinition @'
 [StructLayout(LayoutKind.Sequential)] public struct FLASHWINFO { public uint cbSize; public IntPtr hwnd; public uint dwFlags; public uint uCount; public uint dwTimeout; }
 [DllImport("user32.dll")] static extern bool FlashWindowEx(ref FLASHWINFO f);
