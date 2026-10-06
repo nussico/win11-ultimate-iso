@@ -1,6 +1,6 @@
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Win11 Ultimate ISO Builder" Width="1080" Height="760" MinWidth="900" MinHeight="600"
+        Title="Win11 Ultimate ISO Builder" Width="1240" Height="860" MinWidth="900" MinHeight="600"
         WindowStartupLocation="CenterScreen" Background="#0E1014" Foreground="#E6E8EB"
         FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="13" UseLayoutRounding="True">
   <Window.Resources>
