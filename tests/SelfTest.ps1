@@ -10,7 +10,7 @@ Assert (-not (Compare-Object $Presets.Basic.Patches @('hwchecks', 'localaccount'
 Assert ('xboxapp' -notin $Presets.Recommended.Patches -and 'edge' -notin $Presets.Recommended.Patches) 'Recommended has no Xbox/Edge removal'
 Assert ('xboxapp' -in $Presets.Extreme.Patches -and 'defender' -in $Presets.Extreme.Patches) 'Extreme has aggressive + Xbox'
 Assert ('drivers' -notin $Presets.Extreme.Patches) 'Extreme skips drivers (needs a folder)'
-Assert (-not ($Presets.Values | Where-Object { $_.Unattend.AutoPartition })) 'No preset sets AutoPartition'
+Assert (-not ($Presets.Values | Where-Object { $_.Unattend.AutoInstall })) 'No preset sets AutoInstall'
 Assert (-not ($Presets.Values.Patches | Where-Object { -not $Patches.Contains($_) })) 'Preset ids exist in catalog'
 
 # Protected apps
@@ -26,21 +26,37 @@ Assert (-not ($Patches.Values.Reg | Where-Object { $_ -and $_ -notmatch '^(SYSTE
 
 # Unattend
 $u = @{ UserName = 'User'; Password = 'p<w'; Admin = $true; AutoLogon = $true; ComputerName = ''; TimeZone = 'W. Europe Standard Time'
-    Keyboard = 'de-DE'; Locale = 'de-DE'; SkipOobe = $true; Edition = 'Windows 11 Pro'; AutoPartition = $false; RunWinUtil = $true; CustomScript = ''; EnableAdmin = $false }
+    Keyboard = 'de-DE'; Locale = 'de-DE'; SkipOobe = $true; Edition = 'Windows 11 Pro'; AutoInstall = 'Off'; RunWinUtil = $true; CustomScript = ''; EnableAdmin = $false }
 $x = [xml](New-UnattendXml $u)
 $s = $x.OuterXml
 Assert ($s -match '<Name>User</Name>' -and $s -match 'Administrators') 'Unattend user + admin group'
 Assert ($s -notmatch 'p&lt;w' -and $s -notmatch 'p<w') 'Password not stored in plain text'
-Assert ($s -notmatch 'WillWipeDisk') 'No disk wipe unless AutoPartition'
+Assert ($s -notmatch 'WillWipeDisk') 'No disk wipe when AutoInstall Off'
 Assert ($s -match 'VK7JG-NPHTM-C97JM-9MPGT-3V66T') 'Edition Pro -> generic Pro key'
 Assert ($s -match 'HideOnlineAccountScreens' -and $s -match 'christitus') 'SkipOobe + WinUtil'
 Assert ($s -match '<ComputerName>\*</ComputerName>') 'Empty computer name -> random'
-$u.AutoPartition = $true; $u.SkipOobe = $false; $u.Edition = ''; $u.Password = ''
+$u.AutoInstall = 'Disk0'; $u.SkipOobe = $false; $u.Edition = ''; $u.Password = ''
 $s = ([xml](New-UnattendXml $u)).OuterXml
-Assert ($s -match 'WillWipeDisk' -and $s -notmatch 'HideOnlineAccountScreens' -and $s -notmatch 'ProductKey') 'AutoPartition on, OOBE shown, no key'
+Assert ($s -match 'WillWipeDisk' -and $s -notmatch 'HideOnlineAccountScreens' -and $s -notmatch 'ProductKey') 'Disk0 wipe, OOBE shown, no key'
 $u.Edition = 'Windows 11 Pro'; $u.ProductKey = 'AAAAA-BBBBB-CCCCC-DDDDD-EEEEE'
 $s = ([xml](New-UnattendXml $u)).OuterXml
 Assert ($s -match 'AAAAA-BBBBB' -and $s -notmatch 'VK7JG') 'Own product key overrides generic key'
+$u.AutoInstall = 'BestSsd'
+$s = ([xml](New-UnattendXml $u)).OuterXml
+Assert ($s -match 'autoinstall.ps1' -and $s -notmatch 'WillWipeDisk') 'BestSsd runs script, no fixed-disk wipe'
+
+# Disk picking (autoinstall.ps1)
+. "$root\lib\autoinstall.ps1"
+function D($n, $bus, $media, $gb) { [pscustomobject]@{ Number = $n; BusType = $bus; MediaType = $media; Size = [int64]$gb * 1GB } }
+Assert ((Select-TargetDisk @((D 0 'SATA' 'HDD' 2000), (D 1 'NVMe' 'SSD' 1000))).Number -eq 1) 'NVMe beats HDD'
+Assert ((Select-TargetDisk @((D 0 'SATA' 'HDD' 2000), (D 1 'SATA' 'SSD' 500))).Number -eq 1) 'SATA SSD beats HDD'
+Assert ((Select-TargetDisk @((D 0 'NVMe' 'SSD' 1000), (D 1 'SATA' 'SSD' 500))).Number -eq 0) 'NVMe beats SATA SSD'
+Assert ($null -eq (Select-TargetDisk @((D 0 'NVMe' 'SSD' 1000), (D 1 'NVMe' 'SSD' 2000)))) 'Two NVMe -> ambiguous, no pick'
+Assert ($null -eq (Select-TargetDisk @((D 0 'SATA' 'HDD' 1000), (D 1 'SATA' 'HDD' 2000)))) 'Two HDDs -> no pick'
+Assert ((Select-TargetDisk @((D 0 'USB' 'SSD' 1000), (D 1 'SATA' 'HDD' 500))).Number -eq 1) 'USB never picked'
+Assert ($null -eq (Select-TargetDisk @((D 0 'NVMe' 'SSD' 32)))) 'Disk < 64 GB never picked'
+Assert ((Select-TargetDisk @((D 0 'NVMe' 'SSD' 1000), (D 1 'SATA' 'SSD' 500)) -Exclude 0).Number -eq 1) 'Install-media disk excluded'
+Assert ((Select-TargetDisk @((D 0 'SCSI' 'Unspecified' 127))).Number -eq 0) 'Single Hyper-V disk picked'
 
 # Source
 $info = ConvertTo-IsoInfo 'x.iso' @([pscustomobject]@{ ImageIndex = 1; ImageName = 'Windows 11 Home' }, [pscustomobject]@{ ImageIndex = 6; ImageName = 'Windows 11 Pro' }) ([pscustomobject]@{ Languages = @('de-DE'); Version = '10.0.26200.6584' })

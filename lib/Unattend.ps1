@@ -23,7 +23,12 @@ function New-UnattendXml($u) {
     $key = ''
     if ($k) { $key = "<ProductKey><Key>$(& $esc $k)</Key><WillShowUI>OnError</WillShowUI></ProductKey>" }
     $pe = "<UserData>$key<AcceptEula>true</AcceptEula></UserData>"
-    if ($u.AutoPartition) {
+    if ($u.AutoInstall -eq 'BestSsd') {
+        # Script picks the disk and installs; if it exits without rebooting, normal Setup continues.
+        $run = 'cmd /c for %d in (C D E F G H I J K L M N O P Q R T U V Y Z) do if exist %d:\sources\autoinstall.ps1 powershell -NoProfile -ExecutionPolicy Bypass -File %d:\sources\autoinstall.ps1'
+        $pe += "<RunSynchronous><RunSynchronousCommand wcm:action=`"add`"><Order>1</Order><Path>$run</Path></RunSynchronousCommand></RunSynchronous>"
+    }
+    if ($u.AutoInstall -eq 'Disk0') {
         $pe += '<DiskConfiguration><Disk wcm:action="add"><DiskID>0</DiskID><WillWipeDisk>true</WillWipeDisk><CreatePartitions>' +
         '<CreatePartition wcm:action="add"><Order>1</Order><Type>EFI</Type><Size>300</Size></CreatePartition>' +
         '<CreatePartition wcm:action="add"><Order>2</Order><Type>MSR</Type><Size>16</Size></CreatePartition>' +

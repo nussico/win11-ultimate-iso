@@ -1,6 +1,6 @@
-# Win11 Ultimate ISO Builder — Design Spec
+# Win11 Ultimate ISO Builder - Original Design Spec
 
-Date: 2026-10-06 · Status: draft for review
+Date: 2026-10-06. Historical design notes; the README describes the current tool (WPF GUI, Best SSD auto-install).
 
 ## Goal
 

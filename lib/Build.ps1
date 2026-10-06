@@ -26,6 +26,25 @@ function Get-Oscdimg {
     throw 'oscdimg missing. Install the Windows ADK "Deployment Tools" feature and retry.'
 }
 
+function Get-WinPEOcs {
+    $p = "${env:ProgramFiles(x86)}\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment\amd64\WinPE_OCs"
+    if (Test-Path "$p\WinPE-PowerShell.cab") { return $p }
+    Write-Log 'WinPE add-on not found, installing via winget (about 1 GB)...'
+    winget install -e --id Microsoft.WindowsADK.WinPEAddon --accept-package-agreements --accept-source-agreements --override '/quiet /norestart /features OptionId.WindowsPreinstallationEnvironment' | Out-Null
+    if (Test-Path "$p\WinPE-PowerShell.cab") { return $p }
+    throw 'WinPE add-on missing. Install "Windows ADK WinPE add-on" and retry.'
+}
+
+# PowerShell + storage/DISM cmdlets for autoinstall.ps1. Order matters (dependencies first).
+function Add-WinPEPowerShell($Mount, $Ocs, $Lang) {
+    foreach ($oc in 'WinPE-WMI', 'WinPE-NetFX', 'WinPE-Scripting', 'WinPE-PowerShell', 'WinPE-StorageWMI', 'WinPE-DismCmdlets') {
+        Write-Log " add $oc"
+        foreach ($cab in "$Ocs\$oc.cab", "$Ocs\$lang\${oc}_$lang.cab") {
+            if (Test-Path $cab) { Add-WindowsPackage -Path $Mount -PackagePath $cab | Out-Null }
+        }
+    }
+}
+
 function Mount-SourceIso($Path) { $script:MountedIsos += $Path; Mount-Iso $Path }
 
 function Clear-BuildState {
@@ -58,6 +77,7 @@ function Invoke-Build($Cfg, $Sync) {
         if (Test-Path $w) { Remove-Item $w -Recurse -Force }
         foreach ($d in 'iso', 'mount', 'uup') { New-Item -ItemType Directory -Force "$w\$d" | Out-Null }
         $oscdimg = Get-Oscdimg
+        $peOcs = if ($Cfg.Unattend.Enabled -and $Cfg.Unattend.AutoInstall -eq 'BestSsd') { Get-WinPEOcs }
 
         Enter-Step 2 'Sources'
         $base = Get-SourceIsos $Cfg.IsoFolder | Where-Object Lang -eq $Cfg.BaseLang | Sort-Object Build -Descending | Select-Object -First 1
@@ -128,9 +148,12 @@ function Invoke-Build($Cfg, $Sync) {
         }
 
         Enter-Step 5 'Setup (boot.wim)'
-        if ($Cfg.Patches -contains 'hwchecks') {
+        $bestSsd = $Cfg.Unattend.Enabled -and $Cfg.Unattend.AutoInstall -eq 'BestSsd'
+        if ($Cfg.Patches -contains 'hwchecks' -or $bestSsd) {
+            $peLang = ([string]@((Get-WindowsImage -ImagePath "$w\iso\sources\boot.wim" -Index 2).Languages)[0]).ToLower()
             Mount-WindowsImage -ImagePath "$w\iso\sources\boot.wim" -Index 2 -Path "$w\mount" | Out-Null
-            Set-BootPatches "$w\mount"
+            if ($Cfg.Patches -contains 'hwchecks') { Set-BootPatches "$w\mount" }
+            if ($bestSsd) { Add-WinPEPowerShell "$w\mount" $peOcs $peLang }
             Dismount-WindowsImage -Path "$w\mount" -Save | Out-Null
         }
 
@@ -141,6 +164,10 @@ function Invoke-Build($Cfg, $Sync) {
                 Copy-Item $Cfg.Unattend.CustomScript "$dir\custom.ps1"
             }
             [IO.File]::WriteAllText("$w\iso\autounattend.xml", (New-UnattendXml $Cfg.Unattend))
+            if ($bestSsd) {
+                Copy-Item "$PSScriptRoot\autoinstall.ps1" "$w\iso\sources\autoinstall.ps1"
+                @{ Edition = $Cfg.Unattend.Edition } | ConvertTo-Json | Set-Content "$w\iso\sources\autoinstall.json"
+            }
             Write-Log 'autounattend.xml written'
         }
 

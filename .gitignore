@@ -1,4 +1,6 @@
+# build output and downloads
 work/
 out/
-sources/
 cache/
+sources/*
+!sources/.gitkeep
