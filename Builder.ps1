@@ -67,11 +67,9 @@ $defLang = if ($langs -contains 'de-de') { 'de-de' } else { $langs[0] }
 $ui.BaseLang.SelectedItem = $defLang; $ui.Keyboard.SelectedItem = $defLang; $ui.Locale.SelectedItem = $defLang
 
 # --- Editions ---
-$defaultEditions = 'Windows 11 Home', 'Windows 11 Pro', 'Windows 11 Education'
 $script:edChecks = [ordered]@{}
 function Update-Editions {
-    $checked = @($script:edChecks.Keys | Where-Object { $script:edChecks[$_].IsChecked })
-    if (-not $script:edChecks.Count) { $checked = $defaultEditions }
+    $checked = @($script:edChecks.Keys | Where-Object { $script:edChecks[$_].IsChecked })   # none on start; the user picks
     $iso = $script:IsoInfos | Where-Object Lang -eq $ui.BaseLang.SelectedItem | Select-Object -First 1
     $names = @($iso.Editions.Name | Where-Object { $_ })
     $all = @($names)
