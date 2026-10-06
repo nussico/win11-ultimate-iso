@@ -201,6 +201,7 @@
           </StackPanel>
         </StackPanel>
         <StackPanel DockPanel.Dock="Bottom" Margin="24,0,20,24">
+          <CheckBox x:Name="ShowAdvanced" Style="{StaticResource Toggle}" Content="Advanced options" Margin="0,0,0,18" ToolTip="Show build selector, fast mode and output tuning"/>
           <TextBlock Text="PRESET" Style="{StaticResource Section}"/>
           <ComboBox x:Name="Preset"/>
           <TextBlock x:Name="Summary" Style="{StaticResource Hint}" Margin="0,12,0,0"/>
@@ -234,12 +235,14 @@
         </StackPanel></Border>
         <Border Style="{StaticResource Card}"><StackPanel>
           <TextBlock Text="UUP DUMP" Style="{StaticResource Section}"/>
-          <CheckBox x:Name="UseUup" Style="{StaticResource Toggle}" Content="Download missing editions via UUP dump" IsChecked="True"/>
+          <CheckBox x:Name="UseUup" Style="{StaticResource Toggle}" Content="Download missing editions via UUP dump" IsChecked="True" Margin="0"/>
+          <StackPanel x:Name="AdvSource" Visibility="Collapsed" Margin="0,12,0,0">
           <CheckBox x:Name="Newest" Style="{StaticResource Toggle}" Content="Always use the newest Windows (download it if your ISO is an older version)" IsChecked="True"/>
           <CheckBox x:Name="Fast" Style="{StaticResource Toggle}" Content="Fast mode: ~15 min instead of ~60 (older base build; Windows Update updates it after setup)" IsChecked="True"/>
           <TextBlock x:Name="NewestText" Style="{StaticResource Hint}" Margin="0,0,0,12" Text="Newest available: unknown (offline)"/>
           <StackPanel Style="{StaticResource Row}"><TextBlock Text="Build" Style="{StaticResource Label}"/><ComboBox x:Name="Build" Width="380"/></StackPanel>
           <TextBlock Style="{StaticResource Hint}" Text="Auto picks the newest build matching your ISO."/>
+          </StackPanel>
         </StackPanel></Border>
         <Border Style="{StaticResource Card}"><StackPanel>
           <TextBlock Text="EDITIONS" Style="{StaticResource Section}"/>
@@ -323,10 +326,12 @@
           </StackPanel></Border>
           <Border Grid.Column="1" Style="{StaticResource Card}"><StackPanel>
             <TextBlock Text="OUTPUT" Style="{StaticResource Section}"/>
-            <DockPanel Margin="0,0,0,12"><Button x:Name="BrowseOut" DockPanel.Dock="Right" Content="Browse"/><TextBox x:Name="Output"/></DockPanel>
+            <DockPanel><Button x:Name="BrowseOut" DockPanel.Dock="Right" Content="Browse"/><TextBox x:Name="Output"/></DockPanel>
+            <StackPanel x:Name="AdvBuild" Visibility="Collapsed" Margin="0,12,0,0">
             <CheckBox x:Name="Split" Style="{StaticResource Toggle}" Content="Split install.wim for FAT32 USB"/>
             <CheckBox x:Name="QuickCompress" Style="{StaticResource Toggle}" Content="Quick compression" ToolTip="A few minutes faster per edition; the ISO is about 1 GB bigger."/>
             <CheckBox x:Name="DefenderExclude" Style="{StaticResource Toggle}" Content="Skip Defender scan of work folder" Margin="0" ToolTip="Faster mount/save. Only the work folder is excluded, and only until the build ends."/>
+            </StackPanel>
           </StackPanel></Border>
         </Grid>
         <DockPanel Grid.Row="2" Margin="0,4,0,14">

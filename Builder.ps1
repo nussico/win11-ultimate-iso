@@ -118,6 +118,12 @@ foreach ($g in $Patches.Values.Group | Select-Object -Unique) {   # catalog orde
 }
 $ui.BrowseDrivers.Add_Click({ Select-Folder $ui.DriversPath })
 
+# --- Advanced options: hidden by default; the defaults behind them stay in effect ---
+$ui.ShowAdvanced.Add_Click({
+        $v = if ($ui.ShowAdvanced.IsChecked) { 'Visible' } else { 'Collapsed' }
+        $ui.AdvSource.Visibility = $v; $ui.AdvBuild.Visibility = $v
+    })
+
 # --- Unattended ---
 foreach ($tz in [TimeZoneInfo]::GetSystemTimeZones()) { $ui.TimeZone.Items.Add($tz.Id) | Out-Null }
 $ui.TimeZone.SelectedItem = 'W. Europe Standard Time'
