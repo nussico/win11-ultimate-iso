@@ -16,6 +16,9 @@ $root = $PSScriptRoot
 
 $xaml = [xml](Get-Content "$root\lib\Window.xaml" -Raw)
 $win = [Windows.Markup.XamlReader]::Load((New-Object Xml.XmlNodeReader $xaml))
+# Fit small or scaled screens (e.g. laptops at 125-150%).
+$wa = [Windows.SystemParameters]::WorkArea
+$win.Width = [math]::Min($win.Width, $wa.Width - 40); $win.Height = [math]::Min($win.Height, $wa.Height - 40)
 $ui = @{}
 $xaml.SelectNodes('//*[@*[local-name()="Name"]]') | ForEach-Object { $n = $_.GetAttribute('Name', 'http://schemas.microsoft.com/winfx/2006/xaml'); $ui[$n] = $win.FindName($n) }
 
