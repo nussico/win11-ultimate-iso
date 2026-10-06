@@ -55,6 +55,13 @@ function Select-UupBuild($Builds, $Major) {
         Sort-Object { [version]"10.0.$($_.build)" } -Descending | Select-Object -First 1
 }
 
+# Newest general release: highest "Windows 11, version YYH2" build, newest revision.
+# ponytail: H2-only rule skips hardware-only releases like 26H1; revisit if Microsoft ships a general H1 again.
+function Select-NewestUupBuild($Builds) {
+    $Builds | Where-Object { $_.title -match '^Windows 11, version \d\dH2 ' } |
+        Sort-Object { [version]"10.0.$($_.build)" } -Descending | Select-Object -First 1
+}
+
 function Get-UupLanguages($Uuid) {
     @((Invoke-RestMethod "$UupApi/listlangs.php?id=$Uuid").response.langList | Where-Object { $_ -ne 'neutral' } | Sort-Object)
 }

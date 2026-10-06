@@ -81,15 +81,24 @@ function Invoke-Build($Cfg, $Sync) {
 
         Enter-Step 2 'Sources'
         $base = Get-SourceIsos $Cfg.IsoFolder | Where-Object Lang -eq $Cfg.BaseLang | Sort-Object Build -Descending | Select-Object -First 1
+        $builds = $null; $newest = $null
+        if ($Cfg.UseUup -or $Cfg.LangPacks) {
+            $builds = Get-UupBuilds
+            $newest = Select-NewestUupBuild $builds
+            if ($newest) { Write-Log "Newest Windows: $($newest.title)" }
+        }
+        if ($Cfg.Newest -and $base -and $newest -and [int]$base.Build -lt [int]$newest.build.Split('.')[0]) {
+            if ($Cfg.UseUup) { Write-Log "Your ISO is build $($base.Build) (older version): downloading the newest instead"; $base = $null }
+            else { Write-Log "NOTE: a newer Windows version exists ($($newest.title)); turn on UUP dump to use it" }
+        }
         $missing = @($Cfg.Editions | Where-Object { -not $base -or $_ -notin $base.Editions.Name })
         if ($missing -and -not $Cfg.UseUup) {
             if (-not $base) { throw "No ISO for base language $($Cfg.BaseLang) in $($Cfg.IsoFolder). Add one or enable UUP dump." }
             throw "Editions not in your ISO: $($missing -join ', '). Enable UUP dump or untick them."
         }
-        $major = if ($base) { $base.Build } else { '26200' }
+        $major = if ($base) { $base.Build } elseif ($newest) { $newest.build.Split('.')[0] } else { throw 'Could not reach UUP dump' }
         $uup = $null
         if ($missing -or $Cfg.LangPacks) {
-            $builds = Get-UupBuilds
             $uup = if ($Cfg.UupBuild) { $builds | Where-Object uuid -eq $Cfg.UupBuild } else { Select-UupBuild $builds $major }
             if (-not $uup) { throw "No UUP dump build found for build $major" }
             if ($uup.build.Split('.')[0] -ne $major) { throw "UUP build $($uup.build) does not match ISO build $major. Pick a $major build." }

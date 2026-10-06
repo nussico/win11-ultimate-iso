@@ -32,13 +32,15 @@ $script:UupBuilds = @()
 $langs = @('ar-sa', 'cs-cz', 'da-dk', 'de-de', 'en-gb', 'en-us', 'es-es', 'fr-fr', 'it-it', 'ja-jp', 'ko-kr', 'nl-nl', 'pl-pl', 'pt-br', 'ru-ru', 'sv-se', 'tr-tr', 'uk-ua', 'zh-cn')
 try {
     $script:UupBuilds = Get-UupBuilds
-    $langs = Get-UupLanguages (Select-UupBuild $script:UupBuilds '26200').uuid
+    $langs = Get-UupLanguages (Select-NewestUupBuild $script:UupBuilds).uuid
 } catch { }
 $script:IsoInfos = @()
 $buildList = @($script:UupBuilds | Where-Object title -like 'Windows 11, version*' | Sort-Object { [version]"10.0.$($_.build)" } -Descending | Select-Object -First 15)
 $ui.Build.Items.Add('Auto - newest build matching your ISO') | Out-Null
 foreach ($b in $buildList) { $ui.Build.Items.Add($b.title) | Out-Null }
 $ui.Build.SelectedIndex = 0
+$newestBuild = Select-NewestUupBuild $script:UupBuilds
+if ($newestBuild) { $ui.NewestText.Text = "Newest available: $($newestBuild.title)" }
 
 # --- Source / languages ---
 $ui.IsoFolder.Text = "$root\sources"
@@ -155,7 +157,7 @@ function Get-Config {
     $uuid = ''
     if ($ui.Build.SelectedIndex -gt 0) { $uuid = $buildList[$ui.Build.SelectedIndex - 1].uuid }
     @{
-        IsoFolder = $ui.IsoFolder.Text; UseUup = [bool]$ui.UseUup.IsChecked; UupBuild = $uuid; BaseLang = [string]$ui.BaseLang.SelectedItem
+        IsoFolder = $ui.IsoFolder.Text; UseUup = [bool]$ui.UseUup.IsChecked; Newest = [bool]$ui.Newest.IsChecked; UupBuild = $uuid; BaseLang = [string]$ui.BaseLang.SelectedItem
         LangPacks = @($langChecks.Keys | Where-Object { $langChecks[$_].IsChecked -and $_ -ne $ui.BaseLang.SelectedItem })
         Editions = @($script:edChecks.Keys | Where-Object { $script:edChecks[$_].IsChecked })
         Patches = @($Patches.Keys | Where-Object { $patchChecks[$_].IsChecked }); DriversPath = $ui.DriversPath.Text

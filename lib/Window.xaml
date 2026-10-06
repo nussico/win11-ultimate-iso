@@ -215,6 +215,8 @@
         <Border Style="{StaticResource Card}"><StackPanel>
           <TextBlock Text="UUP DUMP" Style="{StaticResource Section}"/>
           <CheckBox x:Name="UseUup" Style="{StaticResource Toggle}" Content="Download missing editions via UUP dump" IsChecked="True"/>
+          <CheckBox x:Name="Newest" Style="{StaticResource Toggle}" Content="Always use the newest Windows (download it if your ISO is an older version)" IsChecked="True"/>
+          <TextBlock x:Name="NewestText" Style="{StaticResource Hint}" Margin="0,0,0,12" Text="Newest available: unknown (offline)"/>
           <StackPanel Style="{StaticResource Row}"><TextBlock Text="Build" Style="{StaticResource Label}"/><ComboBox x:Name="Build" Width="380"/></StackPanel>
           <TextBlock Style="{StaticResource Hint}" Text="Language packs always come from UUP dump and must match the image build. Auto picks the newest matching build."/>
         </StackPanel></Border>
