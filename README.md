@@ -22,7 +22,7 @@ Manual: download the repo ZIP, extract, right-click `Builder.ps1` -> *Run with P
 ## Features
 
 - **Always newest**: picks the newest general Windows 11 release (today 26H2) and downloads it if your ISO is an older version.
-- **Fast mode** (default): UUP downloads skip merging the latest update; Windows Update installs it after setup. Downloaded ISOs are kept in `sources` and reused.
+- **Fast mode** (default): UUP downloads skip merging the latest update (~15 min instead of ~60). The ISO then holds the older base build (e.g. 26100) and Windows Update brings it up to date after setup; turn it off once for a fully current ISO. Downloaded ISOs are kept in `sources` and reused, so later builds skip the download either way.
 - **Sources**: your own official ISOs, and/or automatic download through [UUP dump](https://uupdump.net)
   (Home, Pro, Education, Enterprise).
 - **Languages**: language packs (+ typing, handwriting, OCR) installed into every edition. Switch language in Windows.

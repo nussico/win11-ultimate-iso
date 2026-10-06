@@ -82,7 +82,10 @@ function Invoke-Build($Cfg, $Sync) {
         $peOcs = if ($Cfg.Unattend.Enabled -and $Cfg.Unattend.AutoInstall -eq 'BestSsd') { Get-WinPEOcs }
 
         Enter-Step 2 'Sources'
-        $base = Get-SourceIsos $Cfg.IsoFolder | Where-Object Lang -eq $Cfg.BaseLang | Sort-Object Build -Descending | Select-Object -First 1
+        $base = Get-SourceIsos $Cfg.IsoFolder | Where-Object Lang -eq $Cfg.BaseLang | ForEach-Object {
+            # Fast-mode UUP ISOs hold the older base build (e.g. 26100); the sidecar records the release they came from.
+            if (Test-Path "$($_.Path).build") { $_.Build = (Get-Content "$($_.Path).build").Split('.')[0] }; $_
+        } | Sort-Object { [int]$_.Build } -Descending | Select-Object -First 1
         $builds = $null; $newest = $null
         if ($Cfg.UseUup -or $Cfg.LangPacks) {
             $builds = Get-UupBuilds
@@ -118,6 +121,7 @@ function Invoke-Build($Cfg, $Sync) {
             # Keep it with your ISOs so the next build reuses it instead of downloading again.
             New-Item -ItemType Directory -Force $Cfg.IsoFolder | Out-Null
             $uupIso = (Move-Item $uupIso $Cfg.IsoFolder -Force -PassThru).FullName
+            Set-Content "$uupIso.build" $uup.build
             Write-Log "Saved $(Split-Path $uupIso -Leaf) to $($Cfg.IsoFolder) for next builds"
             if (-not $base) { $base = Get-IsoInfo $uupIso }
             $sources += $missing | ForEach-Object { @{ Iso = $uupIso; Name = $_ } }
