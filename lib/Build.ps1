@@ -115,7 +115,12 @@ function Invoke-Build($Cfg, $Sync) {
         Write-Log "Free space on $($w.Substring(0,2)): $([math]::Round($free/1GB)) GB"
         Clear-BuildState
         Clear-WindowsCorruptMountPoint | Out-Null
-        if (Test-Path $w) { Remove-Item $w -Recurse -Force }
+        if (Test-Path $w) {
+            Write-Log "Removing old work folder $w"
+            # Leftovers of an interrupted build are owned by TrustedInstaller; Remove-ImagePath takes ownership first.
+            try { Remove-Item $w -Recurse -Force -ErrorAction Stop } catch { Remove-ImagePath $w }
+            if (Test-Path $w) { throw "Could not delete the old work folder $w. Restart the PC and try again." }
+        }
         foreach ($d in 'iso', 'mount', 'uup') { New-Item -ItemType Directory -Force "$w\$d" | Out-Null }
         $oscdimg = Get-Oscdimg
         $peOcs = if ($Cfg.Unattend.Enabled -and $Cfg.Unattend.AutoInstall -eq 'BestSsd') { Get-WinPEOcs }
@@ -189,7 +194,7 @@ function Invoke-Build($Cfg, $Sync) {
         foreach ($s in $sources) {
             $wim = Get-InstallImage (Mount-SourceIso $s.Iso)
             $idx = (Get-WindowsImage -ImagePath $wim | Where-Object ImageName -eq $s.Name).ImageIndex
-            Write-Log "Export $($s.Name) (index $idx)"
+            Write-Log "Export $($s.Name) (index $idx) - takes 1-3 minutes"
             Export-WindowsImage -SourceImagePath $wim -SourceIndex $idx -DestinationImagePath "$w\install.wim" -CompressionType fast | Out-Null
         }
         Clear-BuildState
@@ -198,7 +203,7 @@ function Invoke-Build($Cfg, $Sync) {
         $images = Get-WindowsImage -ImagePath "$w\install.wim"
         foreach ($img in $images) {
             if ($Sync.Cancel) { throw 'Cancelled by user' }
-            Write-Log "Mount $($img.ImageName)"
+            Write-Log "Mount $($img.ImageName) - takes 1-2 minutes"
             Mount-WindowsImage -ImagePath "$w\install.wim" -Index $img.ImageIndex -Path "$w\mount" | Out-Null
             foreach ($lp in $lps) {
                 Write-Log " add LP $($lp.Lp)"
@@ -210,6 +215,7 @@ function Invoke-Build($Cfg, $Sync) {
             }
             Invoke-Patches "$w\mount" $Cfg.Patches $Cfg
             # ponytail: no StartComponentCleanup here (slow, small gain); the max-compression export in step 7 shrinks the image.
+            Write-Log "Saving $($img.ImageName) - writing the image and cleaning up takes 3-5 minutes, no output meanwhile"
             Dismount-WindowsImage -Path "$w\mount" -Save | Out-Null
             Write-Log "Saved $($img.ImageName)"
         }
@@ -240,7 +246,7 @@ function Invoke-Build($Cfg, $Sync) {
 
         Enter-Step 7 'Compress'
         foreach ($img in $images) {
-            Write-Log "Export $($img.ImageName) (max compression)"
+            Write-Log "Export $($img.ImageName) (max compression) - takes 5-10 minutes"
             Export-WindowsImage -SourceImagePath "$w\install.wim" -SourceIndex $img.ImageIndex -DestinationImagePath "$w\iso\sources\install.wim" -CompressionType max | Out-Null
         }
         # Read back the final image so the report shows what actually ended up in it.
@@ -261,6 +267,7 @@ function Invoke-Build($Cfg, $Sync) {
         if (Test-Path $Cfg.Output) { Remove-Item $Cfg.Output }
         $boot = "2#p0,e,b$w\iso\boot\etfsboot.com#pEF,e,b$w\iso\efi\microsoft\boot\efisys.bin"
         $ErrorActionPreference = 'Continue'   # oscdimg writes progress to stderr
+        Write-Log "Writing $($Cfg.Output) - takes 1-3 minutes"
         & $oscdimg -m -o -u2 -udfver102 "-bootdata:$boot" -lWIN11_ULTIMATE "$w\iso" $Cfg.Output 2>&1 | Out-Null
         if ($LASTEXITCODE) { throw "oscdimg failed ($LASTEXITCODE)" }
         $ErrorActionPreference = 'Stop'
@@ -268,7 +275,7 @@ function Invoke-Build($Cfg, $Sync) {
         Enter-Step 9 'Finish'
         $saved = $Cfg.Clone(); $saved.Unattend = $Cfg.Unattend.Clone(); $saved.Unattend.Password = ''; $saved.Unattend.ProductKey = ''   # never write secrets to disk
         $saved | ConvertTo-Json -Depth 5 | Set-Content (Join-Path (Split-Path $Cfg.Output) 'config.json')
-        Remove-Item $w -Recurse -Force
+        Remove-ImagePath $w
         Write-Log "DONE: $($Cfg.Output) ($([math]::Round((Get-Item $Cfg.Output).Length/1GB,1)) GB)"
     } catch {
         $Sync.Error = "$_"
