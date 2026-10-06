@@ -77,6 +77,13 @@ $Patches = [ordered]@{
     noerrorrep   = @{ Group = 'Debloat'; Label = 'Disable error reporting'
         Desc = 'Crash reports are no longer sent to Microsoft.'; Reg = @(
             'SOFTWARE\Policies\Microsoft\Windows\Windows Error Reporting|Disabled|1') }
+    # Same as CTT WinUtil "Services - Set to Manual". CTT sets the svchost threshold to the PC's RAM;
+    # the RAM isn't known offline, so the max value gives the same result on any PC (services stay grouped).
+    services     = @{ Group = 'Debloat'; Label = 'Services to manual (CTT)'
+        Desc = 'Like CTT WinUtil: Maps and Storage Service start only when needed; Offline Files, telemetry and Internet Connection Sharing are off; fewer svchost processes. Mobile hotspot stops working.'; Reg = @(
+            'MapsBroker', 'StorSvc' | ForEach-Object { "SYSTEM\ControlSet001\Services\$_|Start|3" }) + @(
+            'CscService', 'DiagTrack', 'SharedAccess' | ForEach-Object { "SYSTEM\ControlSet001\Services\$_|Start|4" }) + @(
+            'SYSTEM\ControlSet001\Control|SvcHostSplitThresholdInKB|4294967295') }
 
     classicmenu  = @{ Group = 'Tweaks'; Label = 'Classic right-click menu'
         Desc = 'The full Windows 10 style context menu, without clicking "Show more options".'; Reg = @(
@@ -166,7 +173,7 @@ $Tweaks = @($Patches.Keys | Where-Object { $Patches[$_].Group -eq 'Tweaks' })
 $Presets = [ordered]@{
     Basic       = @{ Patches = 'hwchecks', 'localaccount', 'skipprivacy', 'nobitlocker' }
     Recommended = @{ Patches = @('hwchecks', 'localaccount', 'skipprivacy', 'nobitlocker', 'bloatapps', 'telemetry', 'adscopilot', 'onedrive', 'activity', 'adid', 'nop2p', 'fileext', 'endtask', 'nobing', 'gamedvr') }
-    CTT         = @{ Patches = @('hwchecks', 'localaccount', 'skipprivacy', 'nobitlocker', 'bloatapps', 'telemetry', 'adscopilot', 'onedrive', 'winutil') + $Tweaks
+    CTT         = @{ Patches = @('hwchecks', 'localaccount', 'skipprivacy', 'nobitlocker', 'bloatapps', 'telemetry', 'adscopilot', 'onedrive', 'services', 'winutil') + $Tweaks
         Unattend = @{ Enabled = $true; SkipOobe = $true; RunWinUtil = $true } }
     Extreme     = @{ Patches = @($Patches.Keys | Where-Object { $_ -ne 'drivers' })
         Unattend = @{ Enabled = $true; SkipOobe = $true; RunWinUtil = $true } }
