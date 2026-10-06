@@ -99,12 +99,19 @@ foreach ($g in $Patches.Values.Group | Select-Object -Unique) {   # catalog orde
     $h = New-Object Windows.Controls.TextBlock -Property @{ Text = $g.ToUpper(); Style = $win.FindResource('Section') }
     if ($g -eq 'Aggressive') { $h.Foreground = $win.FindResource('Danger'); $h.Text = 'AGGRESSIVE - CAN BREAK APPS/UPDATES' }
     $sp.Children.Add($h) | Out-Null
+    # Aggressive gets its own full-width row under the columns so the risky patches stand apart.
+    $wide = $g -eq 'Aggressive'
+    $items = if ($wide) { New-Object Windows.Controls.Primitives.UniformGrid -Property @{ Columns = 3 } } else { $sp }
     foreach ($id in $Patches.Keys | Where-Object { $Patches[$_].Group -eq $g }) {
+        $cell = New-Object Windows.Controls.StackPanel -Property @{ Margin = $(if ($wide) { '0,0,16,0' } else { '0' }) }
         $patchChecks[$id] = New-Check $Patches[$id].Label 'Toggle'
         $patchChecks[$id].Margin = '0,0,0,2'
-        $sp.Children.Add($patchChecks[$id]) | Out-Null
-        $sp.Children.Add((New-Object Windows.Controls.TextBlock -Property @{ Text = $Patches[$id].Desc; Style = $win.FindResource('Hint'); FontSize = 11; Margin = '50,0,0,8' })) | Out-Null
+        $cell.Children.Add($patchChecks[$id]) | Out-Null
+        $cell.Children.Add((New-Object Windows.Controls.TextBlock -Property @{ Text = $Patches[$id].Desc; Style = $win.FindResource('Hint'); FontSize = 11; Margin = '50,0,0,8' })) | Out-Null
+        if ($id -eq 'drivers') { $ui.DriverRow.Parent.Children.Remove($ui.DriverRow); $cell.Children.Add($ui.DriverRow) | Out-Null }
+        $items.Children.Add($cell) | Out-Null
     }
+    if ($wide) { $sp.Children.Add($items) | Out-Null; $card.Child = $sp; $ui.PatchWide.Children.Add($card) | Out-Null; continue }
     $i = [array]::IndexOf($colRows, [int]($colRows | Measure-Object -Minimum).Minimum)
     $colRows[$i] += @($Patches.Values | Where-Object Group -eq $g).Count
     $card.Child = $sp; $patchCols[$i].Children.Add($card) | Out-Null

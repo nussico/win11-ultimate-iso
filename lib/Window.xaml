@@ -225,11 +225,6 @@
           <TextBlock Style="{StaticResource Hint}" Text="The ISO is built in this one language: setup and Windows. Keyboard and formats can be set on the Unattended page."/>
         </StackPanel></Border>
         <Border Style="{StaticResource Card}"><StackPanel>
-          <TextBlock Text="EDITIONS" Style="{StaticResource Section}"/>
-          <WrapPanel x:Name="EditionPanel"/>
-          <TextBlock Style="{StaticResource Hint}" Text="Editions found in your ISO for this language. Ones marked UUP are built via UUP dump."/>
-        </StackPanel></Border>
-        <Border Style="{StaticResource Card}"><StackPanel>
           <TextBlock Text="YOUR ISOS" Style="{StaticResource Section}"/>
           <DockPanel>
             <Button x:Name="ScanIsos" DockPanel.Dock="Right" Content="Scan"/>
@@ -247,9 +242,9 @@
           <TextBlock Style="{StaticResource Hint}" Text="Auto picks the newest build matching your ISO."/>
         </StackPanel></Border>
         <Border Style="{StaticResource Card}"><StackPanel>
-          <TextBlock Text="STORAGE" Style="{StaticResource Section}"/>
-          <DockPanel><Button x:Name="CleanUp" DockPanel.Dock="Right" Content="Clean up"/>
-            <TextBlock x:Name="StorageText" VerticalAlignment="Center" Foreground="{StaticResource Muted}"/></DockPanel>
+          <TextBlock Text="EDITIONS" Style="{StaticResource Section}"/>
+          <WrapPanel x:Name="EditionPanel"/>
+          <TextBlock Style="{StaticResource Hint}" Text="Editions found in your ISO for this language. Ones marked UUP are built via UUP dump."/>
         </StackPanel></Border>
       </StackPanel></ScrollViewer>
 
@@ -259,11 +254,11 @@
         <TextBlock Text="CTT Win11 Creator style tweaks, applied to every edition. Essential apps (Store, winget, Calculator, Photos, Xbox login, Game Bar...) are always protected." Style="{StaticResource Sub}"/>
         <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
           <StackPanel x:Name="PatchCol0"/><StackPanel x:Name="PatchCol1" Grid.Column="1"/><StackPanel x:Name="PatchCol2" Grid.Column="2"/></Grid>
-        <Border Style="{StaticResource Card}"><StackPanel>
-          <TextBlock Text="DRIVER FOLDER" Style="{StaticResource Section}"/>
+        <StackPanel x:Name="PatchWide"/>
+        <!-- Moved under the 'Add drivers from folder' toggle by Builder.ps1 -->
+        <StackPanel Visibility="Collapsed"><StackPanel x:Name="DriverRow" Margin="50,0,0,10">
           <DockPanel><Button x:Name="BrowseDrivers" DockPanel.Dock="Right" Content="Browse"/><TextBox x:Name="DriversPath"/></DockPanel>
-          <TextBlock Style="{StaticResource Hint}" Text="Used when 'Add drivers from folder' is on."/>
-        </StackPanel></Border>
+        </StackPanel></StackPanel>
       </StackPanel></ScrollViewer>
 
       <!-- Unattended -->
@@ -272,6 +267,19 @@
         <TextBlock Text="Generates autounattend.xml so setup answers its own questions." Style="{StaticResource Sub}"/>
         <CheckBox x:Name="UnattendOn" Style="{StaticResource Toggle}" Content="Enable autounattend.xml" Margin="0,0,0,16"/>
         <StackPanel x:Name="UnattendBody">
+          <Border Style="{StaticResource Card}" BorderBrush="#5A2A2A"><StackPanel>
+            <TextBlock Text="INSTALL" Style="{StaticResource Section}"/>
+            <StackPanel Style="{StaticResource Row}"><CheckBox x:Name="SkipEdition" Style="{StaticResource Toggle}" Content="Skip edition choice" Width="200" Margin="0"/><ComboBox x:Name="Edition" Width="260"/></StackPanel>
+            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Product key" Style="{StaticResource Label}"/><TextBox x:Name="ProductKey" Width="300"/></StackPanel>
+            <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,16" Text="Your own key. Empty = enter later, or the PC's digital license activates it automatically."/>
+            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Disk" Style="{StaticResource Label}" Foreground="{StaticResource Danger}"/>
+              <ComboBox x:Name="AutoInstall" Width="420">
+                <ComboBoxItem Content="Off - choose the disk in setup (safe)" Tag="Off" IsSelected="True"/>
+                <ComboBoxItem Content="Best SSD - wipe only if there is one clear choice" Tag="BestSsd"/>
+                <ComboBoxItem Content="Disk 0 - always wipe disk 0" Tag="Disk0"/>
+              </ComboBox></StackPanel>
+            <TextBlock Style="{StaticResource Hint}" Foreground="{StaticResource Danger}" Text="Best SSD prefers NVMe, then SSD, then HDD, never USB or disks under 64 GB, and gives you 10 seconds to cancel with Ctrl+C. If two disks tie, normal setup opens instead. Needs 'Skip edition choice'. Any PC booted from this ISO can be wiped."/>
+          </StackPanel></Border>
           <Border Style="{StaticResource Card}"><StackPanel>
             <TextBlock Text="ACCOUNT" Style="{StaticResource Section}"/>
             <StackPanel Style="{StaticResource Row}"><TextBlock Text="Username" Style="{StaticResource Label}"/><TextBox x:Name="UserName" Width="220" Text="User"/></StackPanel>
@@ -290,20 +298,8 @@
             <StackPanel Style="{StaticResource Row}" Margin="0"><TextBlock Text="Locale / format" Style="{StaticResource Label}"/><ComboBox x:Name="Locale" Width="160"/></StackPanel>
           </StackPanel></Border>
           <Border Style="{StaticResource Card}"><StackPanel>
-            <TextBlock Text="SETUP" Style="{StaticResource Section}"/>
-            <CheckBox x:Name="SkipOobe" Style="{StaticResource Toggle}" Content="Skip all OOBE screens (EULA, privacy, Microsoft account, network)" IsChecked="True"/>
-            <StackPanel Style="{StaticResource Row}"><CheckBox x:Name="SkipEdition" Style="{StaticResource Toggle}" Content="Skip edition choice" Width="200" Margin="0"/><ComboBox x:Name="Edition" Width="260"/></StackPanel>
-            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Product key" Style="{StaticResource Label}"/><TextBox x:Name="ProductKey" Width="300"/></StackPanel>
-            <TextBlock Style="{StaticResource Hint}" Text="Your own key. Empty = enter later, or the PC's digital license activates it automatically."/>
-          </StackPanel></Border>
-          <Border Style="{StaticResource Card}" BorderBrush="#5A2A2A"><StackPanel>
-            <TextBlock Text="AUTOMATIC INSTALL" Style="{StaticResource Section}" Foreground="{StaticResource Danger}"/>
-            <ComboBox x:Name="AutoInstall" Width="420" HorizontalAlignment="Left">
-              <ComboBoxItem Content="Off - choose the disk in setup (safe)" Tag="Off" IsSelected="True"/>
-              <ComboBoxItem Content="Best SSD - wipe only if there is one clear choice" Tag="BestSsd"/>
-              <ComboBoxItem Content="Disk 0 - always wipe disk 0" Tag="Disk0"/>
-            </ComboBox>
-            <TextBlock Style="{StaticResource Hint}" Foreground="{StaticResource Danger}" Text="Best SSD prefers NVMe, then SSD, then HDD, never USB or disks under 64 GB, and shows a 10 second cancel countdown. If two disks tie, normal setup opens instead. Needs 'Skip edition choice'. Any PC booted from this ISO can be wiped."/>
+            <TextBlock Text="SETUP SCREENS" Style="{StaticResource Section}"/>
+            <CheckBox x:Name="SkipOobe" Style="{StaticResource Toggle}" Content="Skip all OOBE screens (EULA, privacy, Microsoft account, network)" IsChecked="True" Margin="0"/>
           </StackPanel></Border>
           <Border Style="{StaticResource Card}"><StackPanel>
             <TextBlock Text="AFTER INSTALL" Style="{StaticResource Section}"/>
@@ -316,7 +312,7 @@
 
       <!-- Build -->
       <Grid x:Name="PageBuild" Style="{StaticResource Page}" Visibility="Collapsed" Margin="36,30,36,30">
-        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <StackPanel><TextBlock Text="Build" Style="{StaticResource H1}"/>
           <TextBlock Text="Check the plan, then build. The log shows every step." Style="{StaticResource Sub}"/></StackPanel>
         <Grid Grid.Row="1">
@@ -335,8 +331,6 @@
         </Grid>
         <DockPanel Grid.Row="2" Margin="0,4,0,14">
           <Button x:Name="BuildBtn" Style="{StaticResource Primary}" Content="Build ISO" DockPanel.Dock="Right" MinWidth="160"/>
-          <Button x:Name="TestVm" Content="Test in VM" DockPanel.Dock="Right" Margin="0,0,10,0" Padding="18,11" ToolTip="Boot the built ISO in a Hyper-V virtual machine"/>
-          <Button x:Name="RemoveVm" Content="Remove VM" DockPanel.Dock="Right" Margin="0,0,10,0" Padding="18,11" ToolTip="Delete the test VM and its virtual disk"/>
           <StackPanel VerticalAlignment="Center" Margin="0,0,24,0">
             <TextBlock x:Name="StepText" Text="Ready" Foreground="{StaticResource Muted}" Margin="0,0,0,8"/>
             <ProgressBar x:Name="Progress" Maximum="9"/></StackPanel>
@@ -345,6 +339,14 @@
           <TextBox x:Name="Log" Height="Auto" Padding="10,8" IsReadOnly="True" Background="Transparent" BorderThickness="0" FontFamily="Cascadia Mono, Consolas" FontSize="12"
                    Foreground="#B9C2D0" VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" VerticalContentAlignment="Top"/>
         </Border>
+        <Border Grid.Row="4" Style="{StaticResource Card}" Margin="0,14,0,0"><StackPanel>
+          <TextBlock Text="TEST &amp; STORAGE" Style="{StaticResource Section}"/>
+          <DockPanel>
+            <Button x:Name="CleanUp" DockPanel.Dock="Right" Content="Clean up" ToolTip="Delete temporary build files and outdated downloads"/>
+            <Button x:Name="RemoveVm" DockPanel.Dock="Right" Content="Remove VM" Margin="0,0,10,0" ToolTip="Delete the test VM and its virtual disk"/>
+            <Button x:Name="TestVm" DockPanel.Dock="Right" Content="Test in VM" Margin="0,0,10,0" ToolTip="Boot the built ISO in a Hyper-V virtual machine"/>
+            <TextBlock x:Name="StorageText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{StaticResource Muted}"/></DockPanel>
+        </StackPanel></Border>
       </Grid>
     </Grid>
   </Grid>

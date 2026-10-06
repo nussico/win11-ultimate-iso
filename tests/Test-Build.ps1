@@ -1,8 +1,8 @@
 # Verifies a finished ISO against the config.json written next to it. Run as admin:
-#   powershell -File Test-Build.ps1 [-Iso out\Win11.iso]
-param([string]$Iso = "$PSScriptRoot\out\Win11.iso")
+#   powershell -File tests\Test-Build.ps1 [-Iso out\Win11.iso]
+param([string]$Iso = "$(Split-Path $PSScriptRoot)\out\Win11.iso")
 $ErrorActionPreference = 'Stop'
-. "$PSScriptRoot\lib\Patches.ps1"; . "$PSScriptRoot\lib\Source.ps1"
+. "$PSScriptRoot\..\lib\Patches.ps1"; . "$PSScriptRoot\..\lib\Source.ps1"
 function Write-Log($m) { }
 $cfg = Get-Content (Join-Path (Split-Path $Iso) 'config.json') -Raw | ConvertFrom-Json
 $script:fails = 0

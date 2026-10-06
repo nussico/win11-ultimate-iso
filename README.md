@@ -57,7 +57,7 @@ The first build installs the Windows ADK *Deployment Tools* via winget.
 
 ```powershell
 powershell -File tests\SelfTest.ps1      # logic checks, no admin needed
-powershell -File Test-Build.ps1          # checks out\Win11.iso (admin)
+powershell -File tests\Test-Build.ps1    # checks out\Win11.iso (admin)
 ```
 
 Then click **Test in VM** on the Build page (needs Hyper-V) and install it there.
