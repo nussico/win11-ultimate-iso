@@ -328,7 +328,9 @@
           <Border Grid.Column="1" Style="{StaticResource Card}"><StackPanel>
             <TextBlock Text="OUTPUT" Style="{StaticResource Section}"/>
             <DockPanel Margin="0,0,0,12"><Button x:Name="BrowseOut" DockPanel.Dock="Right" Content="Browse"/><TextBox x:Name="Output"/></DockPanel>
-            <CheckBox x:Name="Split" Style="{StaticResource Toggle}" Content="Split install.wim for FAT32 USB sticks" Margin="0"/>
+            <CheckBox x:Name="Split" Style="{StaticResource Toggle}" Content="Split install.wim for FAT32 USB"/>
+            <CheckBox x:Name="QuickCompress" Style="{StaticResource Toggle}" Content="Quick compression" ToolTip="A few minutes faster per edition; the ISO is about 1 GB bigger."/>
+            <CheckBox x:Name="DefenderExclude" Style="{StaticResource Toggle}" Content="Skip Defender scan of work folder" Margin="0" ToolTip="Faster mount/save. Only the work folder is excluded, and only until the build ends."/>
           </StackPanel></Border>
         </Grid>
         <DockPanel Grid.Row="2" Margin="0,4,0,14">

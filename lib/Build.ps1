@@ -32,6 +32,7 @@ function Write-BuildHeader($Cfg) {
     Write-Log "Source:         ISO folder $($Cfg.IsoFolder); UUP dump $(if ($Cfg.UseUup) { 'on' } else { 'off' }); always newest $(if ($Cfg.Newest) { 'on' } else { 'off' }); fast mode $(if ($Cfg.Fast) { 'on' } else { 'off' })"
     Write-Log "Unattended:     $(if ($u.Enabled) { "user '$($u.UserName)', auto-install $($u.AutoInstall), edition '$($u.Edition)', $(if ($u.ProductKey) { 'own product key' } else { 'generic key' }), skip OOBE $($u.SkipOobe)" } else { 'off' })"
     Write-Log "Output:         $($Cfg.Output)$(if ($Cfg.Split) { ' (install.wim split for FAT32)' })"
+    Write-Log "Speed:          Defender exclusion $(if ($Cfg.DefenderExclude) { 'on' } else { 'off' }); compression $(if ($Cfg.QuickCompress) { 'quick' } else { 'max' })"
 }
 
 function Write-BuildSummary($Cfg) {
@@ -95,6 +96,23 @@ function Clear-BuildState {
     $script:MountedIsos = @()
 }
 
+# Optional speed-up: Defender scans every file DISM writes. Excludes only the work folder, only for this build.
+function Add-DefenderExclusion($Path) {
+    try {
+        if ($Path -in @((Get-MpPreference).ExclusionPath)) { return }
+        Add-MpPreference -ExclusionPath $Path -ErrorAction Stop
+        $script:DefenderExcluded = $Path
+        Write-Log "Defender exclusion added for $Path (removed when the build ends)"
+    } catch { Write-Log "NOTE: could not add Defender exclusion ($_) - building without it" }
+}
+
+function Remove-DefenderExclusion {
+    if (-not $script:DefenderExcluded) { return }
+    try { Remove-MpPreference -ExclusionPath $script:DefenderExcluded -ErrorAction Stop; Write-Log 'Defender exclusion removed' }
+    catch { Write-Log "WARN: could not remove the Defender exclusion for $($script:DefenderExcluded): $_" }
+    $script:DefenderExcluded = $null
+}
+
 function Invoke-Build($Cfg, $Sync) {
     $script:BuildSync = $Sync
     $ErrorActionPreference = 'Stop'
@@ -121,6 +139,7 @@ function Invoke-Build($Cfg, $Sync) {
             if (Test-Path $w) { throw "Could not delete the old work folder $w. Restart the PC and try again." }
         }
         foreach ($d in 'iso', 'mount', 'uup') { New-Item -ItemType Directory -Force "$w\$d" | Out-Null }
+        if ($Cfg.DefenderExclude) { Add-DefenderExclusion $w }
         $oscdimg = Get-Oscdimg
         $peOcs = if ($Cfg.Unattend.Enabled -and $Cfg.Unattend.AutoInstall -eq 'BestSsd') { Get-WinPEOcs }
 
@@ -156,10 +175,10 @@ function Invoke-Build($Cfg, $Sync) {
         $drive = Mount-SourceIso $base.Path
         Write-Log "Copying $($base.Path)"
         $ErrorActionPreference = 'Continue'
-        robocopy "$drive\" "$w\iso" /E /A-:R /NFL /NDL /NJH /NJS /NP | Out-Null
+        # Skip the install image (4-6 GB): step 3 exports the editions straight from the mounted ISO.
+        robocopy "$drive\" "$w\iso" /E /A-:R /XF install.wim install.esd install*.swm /NFL /NDL /NJH /NJS /NP | Out-Null
         if ($LASTEXITCODE -ge 8) { throw "robocopy failed ($LASTEXITCODE)" }
         $ErrorActionPreference = 'Stop'
-        Remove-Item "$w\iso\sources\install.wim", "$w\iso\sources\install.esd" -ErrorAction SilentlyContinue
 
 
         Enter-Step 3 'Editions'
@@ -213,9 +232,11 @@ function Invoke-Build($Cfg, $Sync) {
         }
 
         Enter-Step 7 'Compress'
+        # Quick = XPRESS: a few minutes faster per edition, about 1 GB bigger ISO.
+        $comp = if ($Cfg.QuickCompress) { 'fast' } else { 'max' }
         foreach ($img in $images) {
-            Write-Log "Export $($img.ImageName) (max compression) - takes 5-10 minutes"
-            Export-WindowsImage -SourceImagePath "$w\install.wim" -SourceIndex $img.ImageIndex -DestinationImagePath "$w\iso\sources\install.wim" -CompressionType max | Out-Null
+            Write-Log "Export $($img.ImageName) ($comp compression) - takes $(if ($Cfg.QuickCompress) { '1-3' } else { '5-10' }) minutes"
+            Export-WindowsImage -SourceImagePath "$w\install.wim" -SourceIndex $img.ImageIndex -DestinationImagePath "$w\iso\sources\install.wim" -CompressionType $comp | Out-Null
         }
         # Read back the final image so the report shows what actually ended up in it.
         foreach ($img in Get-WindowsImage -ImagePath "$w\iso\sources\install.wim") {
@@ -236,8 +257,11 @@ function Invoke-Build($Cfg, $Sync) {
         $boot = "2#p0,e,b$w\iso\boot\etfsboot.com#pEF,e,b$w\iso\efi\microsoft\boot\efisys.bin"
         $ErrorActionPreference = 'Continue'   # oscdimg writes progress to stderr
         Write-Log "Writing $($Cfg.Output) - takes 1-3 minutes"
-        & $oscdimg -m -o -u2 -udfver102 "-bootdata:$boot" -lWIN11_ULTIMATE "$w\iso" $Cfg.Output 2>&1 | Out-Null
-        if ($LASTEXITCODE) { throw "oscdimg failed ($LASTEXITCODE)" }
+        $out = & $oscdimg -m -o -u2 -udfver102 "-bootdata:$boot" -lWIN11_ULTIMATE "$w\iso" $Cfg.Output 2>&1
+        if ($LASTEXITCODE) {
+            $out | Where-Object { "$_" -notmatch '% complete' } | Select-Object -Last 5 | ForEach-Object { Write-Log " oscdimg: $_" }
+            throw "oscdimg failed ($LASTEXITCODE)"
+        }
         $ErrorActionPreference = 'Stop'
 
         Enter-Step 9 'Finish'
@@ -251,6 +275,7 @@ function Invoke-Build($Cfg, $Sync) {
         Write-Log "Work folder kept for inspection: $w"
     } finally {
         try { Clear-BuildState } catch { Write-Log "Cleanup warning: $_" }
+        Remove-DefenderExclusion
         try { Write-BuildSummary $Cfg } catch { Write-Log "Summary failed: $_" }
         $Sync.Done = $true
     }

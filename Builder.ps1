@@ -185,7 +185,7 @@ function Get-Config {
             ProductKey = $ui.ProductKey.Text.Trim().ToUpper(); AutoInstall = [string]$ui.AutoInstall.SelectedItem.Tag
             RunWinUtil = [bool]$ui.RunWinUtil.IsChecked; CustomScript = $ui.CustomScript.Text; EnableAdmin = [bool]$ui.EnableAdmin.IsChecked
         }
-        Output = $ui.Output.Text; Split = [bool]$ui.Split.IsChecked; WorkDir = "$root\work"; CacheDir = "$root\cache"
+        Output = $ui.Output.Text; Split = [bool]$ui.Split.IsChecked; QuickCompress = [bool]$ui.QuickCompress.IsChecked; DefenderExclude = [bool]$ui.DefenderExclude.IsChecked; WorkDir = "$root\work"; CacheDir = "$root\cache"
     }
 }
 
@@ -221,7 +221,7 @@ function Update-Plan {
         }
         $lines += "Editions: $($cfg.Editions -join ', ')  ($($cfg.BaseLang))"
         $lines += "Patches: $($cfg.Patches.Count) selected$(if ($cfg.Unattend.Enabled) { ', unattended setup' })"
-        $min = 2 + 10 * $cfg.Editions.Count + $(if ($p.Missing) { if ($cfg.Fast) { 15 } else { 60 } } else { 0 })
+        $min = 2 + $(if ($cfg.QuickCompress) { 6 } else { 10 }) * $cfg.Editions.Count + $(if ($p.Missing) { if ($cfg.Fast) { 15 } else { 60 } } else { 0 })
         $lines += "Time: about $min minutes"
         $drive = Get-PSDrive $root.Substring(0, 1)
         $lines += "Disk: needs 60 GB free on $($root.Substring(0, 2)), you have $([math]::Round($drive.Free / 1GB)) GB$(if ($drive.Free -lt 60GB) { '  - NOT ENOUGH' })"
