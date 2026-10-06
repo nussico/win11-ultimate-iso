@@ -93,14 +93,6 @@ function Get-UupLanguages($Uuid) {
     @((Invoke-RestMethod "$UupApi/listlangs.php?id=$Uuid").response.langList | Where-Object { $_ -ne 'neutral' } | Sort-Object)
 }
 
-function Save-Url($Url, $Out, $Sha1) {
-    $ErrorActionPreference = 'Continue'
-    if ((Test-Path $Out) -and (Get-FileHash $Out -Algorithm SHA1).Hash -eq $Sha1) { return }
-    curl.exe -sSL --retry 3 -o $Out $Url
-    if ($LASTEXITCODE) { throw "Download failed: $Out" }
-    if ($Sha1 -and (Get-FileHash $Out -Algorithm SHA1).Hash -ne $Sha1) { throw "Checksum mismatch: $Out" }
-}
-
 # UUP dump package request. Fast = skip integrating the latest cumulative update (Windows Update installs it later).
 function Get-UupRequest([string[]]$EditionNames, [bool]$Fast) {
     $direct = @($EditionNames | ForEach-Object { $UupEditions[$_].Uup } | Where-Object { $_ })

@@ -16,7 +16,7 @@ The user is an IT apprentice and gamer; answer in short, plain English.
 - `lib/Build.ps1` - `Invoke-Build`, steps 1-9, detailed log + summary to `out\build-log.txt`.
 - `lib/Source.ps1` - ISO detection, UUP dump (`Get-UupBuilds`, `Select-NewestUupBuild`, `Save-UupIso`), `Get-BuildPlan` (shared by build and GUI plan card).
 - `lib/Patches.ps1` - `$Patches` catalog (Group, Label, Desc, Reg, Action, Boot), `$RemoveApps`, `$ProtectedApps`, `$Presets`, offline registry helpers.
-- `lib/Unattend.ps1` - autounattend.xml. `lib/autoinstall.js` - Best-SSD disk picker, JScript run by cscript inside Setup (stock Setup boot.wim has cscript, WMI incl. storage provider, diskpart, dism, bcdboot, robocopy - but no PowerShell; don't reintroduce the WinPE add-on).
+- `lib/Unattend.ps1` - autounattend.xml. `lib/autoinstall.js` - Best-SSD disk picker, JScript run by cscript inside Setup (stock Setup boot.wim has cscript, WMI cimv2, diskpart, dism, bcdboot, robocopy - but no PowerShell; don't reintroduce the WinPE add-on). Disks come from Win32_DiskDrive: MSFT_PhysicalDisk (storage WMI) returns NO disks inside Setup (seen in a Hyper-V test). NVMe = VEN_NVME in PNPDeviceID, SATA SSD guessed from the model name.
 - `tests/SelfTest.ps1` - assert checks, no admin. `tests/Test-Build.ps1` - verifies a finished ISO (admin).
 
 ## Hard rules

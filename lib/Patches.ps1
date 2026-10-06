@@ -297,7 +297,7 @@ function Set-OfflineReg([string[]]$Entries) {
     }
 }
 
-# Order inside an edition: app removal -> registry -> files/drivers (LPs are added before this by Build).
+# Order inside an edition: app removal -> registry -> files/drivers.
 # Registry entries of the selected patches. Patches without Reg must not add empty entries.
 function Get-PatchReg([string[]]$Ids) { @($Ids | ForEach-Object { $Patches[$_].Reg } | Where-Object { $_ }) }
 

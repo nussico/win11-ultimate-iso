@@ -58,20 +58,24 @@ Assert ($s -match 'cscript //nologo %d:\\sources\\autoinstall.js "Windows 11 Pro
 $s = ([xml](New-LocalAccountXml)).OuterXml
 Assert ($s -match 'HideOnlineAccountScreens>true' -and $s -notmatch 'windowsPE|LocalAccounts') 'Local-account-only XML: hides MS account, setup stays interactive'
 
-# Disk picking (autoinstall.js, run with cscript like Setup does). Bus: 1 SCSI, 7 USB, 11 SATA, 17 NVMe. Media: 0 ?, 3 HDD, 4 SSD.
+# Disk picking (autoinstall.js, run with cscript like Setup does), fed with real Win32_DiskDrive values.
 $cases = [ordered]@{
-    'NVMe beats HDD'                 = '[D(0,11,3,2000), D(1,17,4,1000)], [], 1'
-    'SATA SSD beats HDD'             = '[D(0,11,3,2000), D(1,11,4,500)], [], 1'
-    'NVMe beats SATA SSD'            = '[D(0,17,4,1000), D(1,11,4,500)], [], 0'
-    'Two NVMe -> ambiguous, no pick' = '[D(0,17,4,1000), D(1,17,4,2000)], [], null'
-    'Two HDDs -> no pick'            = '[D(0,11,3,1000), D(1,11,3,2000)], [], null'
-    'USB never picked'               = '[D(0,7,4,1000), D(1,11,3,500)], [], 1'
-    'Disk < 64 GB never picked'      = '[D(0,17,4,32)], [], null'
-    'Install-media disk excluded'    = '[D(0,17,4,1000), D(1,11,4,500)], [0], 1'
-    'Single Hyper-V disk picked'     = '[D(0,1,0,127)], [], 0'
+    'NVMe beats HDD'                 = '[HDD(0,2000), NVME(1,1000)], [], 1'
+    'SATA SSD beats HDD'             = '[HDD(0,2000), SSD(1,500)], [], 1'
+    'NVMe beats SATA SSD'            = '[NVME(0,1000), SSD(1,500)], [], 0'
+    'Two NVMe -> ambiguous, no pick' = '[NVME(0,1000), NVME(1,2000)], [], null'
+    'Two HDDs -> no pick'            = '[HDD(0,1000), HDD(1,2000)], [], null'
+    'USB never picked'               = '[USB(0,1000), HDD(1,500)], [], 1'
+    'External USB HDD never picked'  = '[toDisk(0, "WD Elements", "SCSI", "SCSI\\DISK&VEN_WD", "External hard disk media", 2000 * GB), HDD(1,500)], [], 1'
+    'Disk < 64 GB never picked'      = '[NVME(0,32)], [], null'
+    'Install-media disk excluded'    = '[NVME(0,1000), SSD(1,500)], [0], 1'
+    'Single Hyper-V disk picked'     = '[toDisk(0, "Microsoft Virtual Disk", "SCSI", "SCSI\\DISK&VEN_MSFT&PROD_VIRTUAL_DISK\\000000", "Fixed hard disk media", "85899345920")], [], 0'
 }
 $js = "var TESTING = true;`r`n" + (Get-Content "$root\lib\autoinstall.js" -Raw) + "`r`n" +
-    'function D(n, bus, media, gb) { return { Number: n, BusType: bus, MediaType: media, Size: gb * GB }; }' + "`r`n" +
+    'function NVME(n, gb) { return toDisk(n, "CT1000P5SSD8", "SCSI", "SCSI\\DISK&VEN_NVME&PROD_CT1000P5SSD8\\5&1", "Fixed hard disk media", gb * GB); }' + "`r`n" +
+    'function SSD(n, gb) { return toDisk(n, "Samsung SSD 870 EVO 500GB", "IDE", "SCSI\\DISK&VEN_SAMSUNG&PROD_SSD_870\\4&1", "Fixed hard disk media", gb * GB); }' + "`r`n" +
+    'function HDD(n, gb) { return toDisk(n, "ST4000DM004-2CV104", "IDE", "SCSI\\DISK&VEN_&PROD_ST4000DM004\\4&1", "Fixed hard disk media", gb * GB); }' + "`r`n" +
+    'function USB(n, gb) { return toDisk(n, "SanDisk Extreme SSD", "USB", "USBSTOR\\DISK&VEN_SANDISK\\1", "Removable Media", gb * GB); }' + "`r`n" +
     'function t(disks, ex, want) { var d = selectTargetDisk(disks, ex); WScript.Echo((d ? d.Number : null) === want ? "ok" : "FAIL"); }' + "`r`n" +
     (($cases.Values | ForEach-Object { "t($_);" }) -join "`r`n")
 $jsFile = Join-Path $env:TEMP 'w11-autoinstall-test.js'
