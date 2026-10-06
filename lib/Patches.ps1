@@ -28,7 +28,7 @@ $CdmOff = 'ContentDeliveryAllowed', 'SilentInstalledAppsEnabled', 'SystemPaneSug
     ForEach-Object { "DEFAULT\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager|$_|0" }
 
 $Patches = [ordered]@{
-    hwchecks     = @{ Group = 'Setup bypasses'; Label = 'Skip TPM/SecureBoot/RAM/CPU checks'; Boot = $true
+    hwchecks     = @{ Group = 'Setup bypasses'; Label = 'Skip TPM/CPU/RAM checks'; Boot = $true
         Desc = 'Installs on PCs without TPM 2.0, Secure Boot, 4 GB RAM or a supported CPU.'; Reg = @(
             'SYSTEM\Setup\LabConfig|BypassTPMCheck|1', 'SYSTEM\Setup\LabConfig|BypassSecureBootCheck|1',
             'SYSTEM\Setup\LabConfig|BypassRAMCheck|1', 'SYSTEM\Setup\LabConfig|BypassCPUCheck|1',
@@ -54,7 +54,8 @@ $Patches = [ordered]@{
             'SOFTWARE\Policies\Microsoft\Windows\DataCollection|AllowTelemetry|0',
             'SYSTEM\ControlSet001\Services\DiagTrack|Start|4', 'SYSTEM\ControlSet001\Services\dmwappushservice|Start|4') }
     adscopilot   = @{ Group = 'Debloat'; Label = 'Disable ads, tips and Copilot'
-        Desc = 'Turns off Copilot, Start menu recommendations, suggested apps, tips and silently installed apps.'; Reg = @(
+        Desc = 'Turns off Copilot, Start menu recommendations, suggested apps, tips, silently installed apps and the "Let''s finish setting up" nag.'; Reg = @(
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement|ScoobeSystemSettingEnabled|0',
             'SOFTWARE\Policies\Microsoft\Windows\CloudContent|DisableWindowsConsumerFeatures|1',
             'SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot|TurnOffWindowsCopilot|1',
             'DEFAULT\Software\Policies\Microsoft\Windows\WindowsCopilot|TurnOffWindowsCopilot|1',
@@ -63,6 +64,19 @@ $Patches = [ordered]@{
         Desc = 'OneDrive is not installed for new users. You can still get it from the Store later.'; Reg = @(
             'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Run|OneDriveSetup|-')
         Action = { param($m, $c) Remove-ImagePath "$m\Windows\System32\OneDriveSetup.exe" } }
+    activity     = @{ Group = 'Debloat'; Label = 'Disable activity history'
+        Desc = 'Windows stops recording which apps and files you used and does not upload that history.'; Reg = @(
+            'EnableActivityFeed', 'PublishUserActivities', 'UploadUserActivities' |
+            ForEach-Object { "SOFTWARE\Policies\Microsoft\Windows\System|$_|0" }) }
+    adid         = @{ Group = 'Debloat'; Label = 'Disable advertising ID'
+        Desc = 'Apps cannot use an advertising ID to show you personalized ads.'; Reg = @(
+            'SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo|DisabledByGroupPolicy|1') }
+    nop2p        = @{ Group = 'Debloat'; Label = 'No update sharing (P2P)'
+        Desc = 'Windows Update downloads only from Microsoft and does not upload updates to other PCs.'; Reg = @(
+            'SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization|DODownloadMode|0') }
+    noerrorrep   = @{ Group = 'Debloat'; Label = 'Disable error reporting'
+        Desc = 'Crash reports are no longer sent to Microsoft.'; Reg = @(
+            'SOFTWARE\Policies\Microsoft\Windows\Windows Error Reporting|Disabled|1') }
 
     classicmenu  = @{ Group = 'Tweaks'; Label = 'Classic right-click menu'
         Desc = 'The full Windows 10 style context menu, without clicking "Show more options".'; Reg = @(
@@ -82,6 +96,40 @@ $Patches = [ordered]@{
     nowidgets    = @{ Group = 'Tweaks'; Label = 'Disable widgets'
         Desc = 'Removes the news and weather widgets board from the taskbar.'; Reg = @(
             'SOFTWARE\Policies\Microsoft\Dsh|AllowNewsAndInterests|0') }
+    darkmode     = @{ Group = 'Tweaks'; Label = 'Dark mode'
+        Desc = 'Windows and apps use the dark theme from the first login.'; Reg = @(
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize|AppsUseLightTheme|0',
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize|SystemUsesLightTheme|0') }
+    hiddenfiles  = @{ Group = 'Tweaks'; Label = 'Show hidden files'
+        Desc = 'Explorer shows hidden files and folders like AppData.'; Reg = @(
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|Hidden|1') }
+    thispc       = @{ Group = 'Tweaks'; Label = 'Explorer opens "This PC"'
+        Desc = 'Explorer starts on your drives instead of Home.'; Reg = @(
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|LaunchTo|1') }
+    nosearchbox  = @{ Group = 'Tweaks'; Label = 'Hide taskbar search box'
+        Desc = 'Removes the search box from the taskbar. Press Start and type to search as usual.'; Reg = @(
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Search|SearchboxTaskbarMode|0') }
+    notaskview   = @{ Group = 'Tweaks'; Label = 'Hide Task View button'
+        Desc = 'Removes the Task View button from the taskbar. Win+Tab still works.'; Reg = @(
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|ShowTaskViewButton|0') }
+    nofaststart  = @{ Group = 'Tweaks'; Label = 'Disable Fast Startup'
+        Desc = 'Shut down really shuts down. Fixes driver glitches and dual-boot problems; boot is a few seconds slower.'; Reg = @(
+            'SYSTEM\ControlSet001\Control\Session Manager\Power|HiberbootEnabled|0') }
+
+    gamedvr      = @{ Group = 'Gaming'; Label = 'Disable background recording'
+        Desc = 'Stops Game DVR from recording gameplay in the background (saves FPS). Game Bar itself stays.'; Reg = @(
+            'DEFAULT\System\GameConfigStore|GameDVR_Enabled|0',
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\GameDVR|AppCaptureEnabled|0') }
+    hags         = @{ Group = 'Gaming'; Label = 'Hardware GPU scheduling'
+        Desc = 'Lets the graphics card manage its own memory. Can lower input lag; needs a newer GPU and driver.'; Reg = @(
+            'SYSTEM\ControlSet001\Control\GraphicsDrivers|HwSchMode|2') }
+    nothrottle   = @{ Group = 'Gaming'; Label = 'Disable power throttling'
+        Desc = 'Windows no longer slows down background apps to save power. Uses more battery on laptops.'; Reg = @(
+            'SYSTEM\ControlSet001\Control\Power\PowerThrottling|PowerThrottlingOff|1') }
+    gamepriority = @{ Group = 'Gaming'; Label = 'Game network/CPU priority'
+        Desc = 'Removes network throttling for media apps and gives games more CPU time.'; Reg = @(
+            'SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile|NetworkThrottlingIndex|4294967295',
+            'SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile|SystemResponsiveness|10') }
 
     edge         = @{ Group = 'Aggressive'; Label = 'Remove Edge (keeps WebView2)'
         Desc = 'Deletes Microsoft Edge. WebView2 stays so apps keep working. You need another browser; Windows Update may bring Edge back.'; Reg = @(
@@ -114,10 +162,10 @@ $Patches = [ordered]@{
             $s.Save() } }
 }
 
-$Tweaks = 'classicmenu', 'taskbarleft', 'fileext', 'endtask', 'nobing', 'nowidgets'
+$Tweaks = @($Patches.Keys | Where-Object { $Patches[$_].Group -eq 'Tweaks' })
 $Presets = [ordered]@{
     Basic       = @{ Patches = 'hwchecks', 'localaccount', 'skipprivacy', 'nobitlocker' }
-    Recommended = @{ Patches = @('hwchecks', 'localaccount', 'skipprivacy', 'nobitlocker', 'bloatapps', 'telemetry', 'adscopilot', 'onedrive', 'fileext', 'endtask', 'nobing') }
+    Recommended = @{ Patches = @('hwchecks', 'localaccount', 'skipprivacy', 'nobitlocker', 'bloatapps', 'telemetry', 'adscopilot', 'onedrive', 'activity', 'adid', 'nop2p', 'fileext', 'endtask', 'nobing', 'gamedvr') }
     CTT         = @{ Patches = @('hwchecks', 'localaccount', 'skipprivacy', 'nobitlocker', 'bloatapps', 'telemetry', 'adscopilot', 'onedrive', 'winutil') + $Tweaks
         Unattend = @{ Enabled = $true; SkipOobe = $true; RunWinUtil = $true } }
     Extreme     = @{ Patches = @($Patches.Keys | Where-Object { $_ -ne 'drivers' })

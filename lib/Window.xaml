@@ -257,7 +257,8 @@
       <ScrollViewer x:Name="PagePatches" Style="{StaticResource Page}" Visibility="Collapsed" VerticalScrollBarVisibility="Auto"><StackPanel Margin="36,30,36,30">
         <TextBlock Text="Patches" Style="{StaticResource H1}"/>
         <TextBlock Text="CTT Win11 Creator style tweaks, applied to every edition. Essential apps (Store, winget, Calculator, Photos, Xbox login, Game Bar...) are always protected." Style="{StaticResource Sub}"/>
-        <UniformGrid x:Name="PatchPanel" Columns="2"/>
+        <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+          <StackPanel x:Name="PatchCol0"/><StackPanel x:Name="PatchCol1" Grid.Column="1"/><StackPanel x:Name="PatchCol2" Grid.Column="2"/></Grid>
         <Border Style="{StaticResource Card}"><StackPanel>
           <TextBlock Text="DRIVER FOLDER" Style="{StaticResource Section}"/>
           <DockPanel><Button x:Name="BrowseDrivers" DockPanel.Dock="Right" Content="Browse"/><TextBox x:Name="DriversPath"/></DockPanel>

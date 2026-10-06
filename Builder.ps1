@@ -93,8 +93,10 @@ function Update-Editions {
 
 # --- Patches ---
 $patchChecks = @{}
-foreach ($g in 'Setup bypasses', 'Debloat', 'Tweaks', 'Aggressive', 'Extras') {
-    $card = New-Object Windows.Controls.Border -Property @{ Style = $win.FindResource('Card'); Margin = '0,0,14,14' }
+$patchCols = $ui.PatchCol0, $ui.PatchCol1, $ui.PatchCol2
+$colRows = @(0, 0, 0)   # patches per column; each card goes to the shortest column
+foreach ($g in $Patches.Values.Group | Select-Object -Unique) {   # catalog order
+    $card = New-Object Windows.Controls.Border -Property @{ Style = $win.FindResource('Card'); Margin = '0,0,10,10'; Padding = '14,12' }
     $sp = New-Object Windows.Controls.StackPanel
     $h = New-Object Windows.Controls.TextBlock -Property @{ Text = $g.ToUpper(); Style = $win.FindResource('Section') }
     if ($g -eq 'Aggressive') { $h.Foreground = $win.FindResource('Danger'); $h.Text = 'AGGRESSIVE - CAN BREAK APPS/UPDATES' }
@@ -103,9 +105,11 @@ foreach ($g in 'Setup bypasses', 'Debloat', 'Tweaks', 'Aggressive', 'Extras') {
         $patchChecks[$id] = New-Check $Patches[$id].Label 'Toggle'
         $patchChecks[$id].Margin = '0,0,0,2'
         $sp.Children.Add($patchChecks[$id]) | Out-Null
-        $sp.Children.Add((New-Object Windows.Controls.TextBlock -Property @{ Text = $Patches[$id].Desc; Style = $win.FindResource('Hint'); Margin = '50,0,0,14' })) | Out-Null
+        $sp.Children.Add((New-Object Windows.Controls.TextBlock -Property @{ Text = $Patches[$id].Desc; Style = $win.FindResource('Hint'); FontSize = 11; Margin = '50,0,0,8' })) | Out-Null
     }
-    $card.Child = $sp; $ui.PatchPanel.Children.Add($card) | Out-Null
+    $i = [array]::IndexOf($colRows, [int]($colRows | Measure-Object -Minimum).Minimum)
+    $colRows[$i] += @($Patches.Values | Where-Object Group -eq $g).Count
+    $card.Child = $sp; $patchCols[$i].Children.Add($card) | Out-Null
 }
 $ui.BrowseDrivers.Add_Click({ Select-Folder $ui.DriversPath })
 
