@@ -30,9 +30,13 @@ Manual: download the repo ZIP, extract, right-click `Builder.ps1` -> *Run with P
 - **Patches**
   - Setup bypasses: TPM / Secure Boot / RAM / CPU checks, local account, skip privacy screens, no auto-BitLocker
   - Debloat: preinstalled apps, telemetry, ads/tips/Copilot, OneDrive. Essential apps (Store, winget, Calculator, Photos, Xbox login, Game Bar...) are protected
+  - Tweaks: classic right-click menu, taskbar on the left, file extensions, End task, no Bing in Start search, no widgets
   - Aggressive: remove Edge (keeps WebView2), disable Defender, disable Recall
   - Extras: inject drivers, CTT WinUtil shortcut
 - **Unattended**: local account (default `User`), timezone, keyboard, skip OOBE, product key, run WinUtil or your own script after first login.
+- **Build plan**: the Build page shows what will happen before you start (reuse or download, time, disk space). Taskbar progress, and the window flashes when done.
+- **Storage**: sizes of ISOs, builds and leftovers; *Clean up* deletes temp files and outdated downloads (never your own ISOs).
+- **Test in VM**: one click creates a Hyper-V VM (no TPM, so it tests the bypasses) that boots the built ISO.
 - **Automatic install**: *Best SSD* picks the one clear best internal disk (NVMe > SSD > HDD, never USB) with a 10 s cancel countdown, otherwise normal setup opens.
 
 ## Requirements
@@ -45,8 +49,8 @@ The first build installs the Windows ADK *Deployment Tools* (and, for *Best SSD*
 | Preset | Patches |
 |---|---|
 | Basic | setup bypasses |
-| Recommended | + debloat (keeps the Xbox app) |
-| CTT | + WinUtil shortcut; unattended: skip OOBE, run WinUtil |
+| Recommended | + debloat (keeps the Xbox app), file extensions, End task, no Bing |
+| CTT | + all tweaks, WinUtil shortcut; unattended: skip OOBE, run WinUtil |
 | Extreme | everything incl. Edge / Defender / Recall and the Xbox app |
 
 ## Testing a build
@@ -56,7 +60,7 @@ powershell -File tests\SelfTest.ps1      # logic checks, no admin needed
 powershell -File Test-Build.ps1          # checks out\Win11.iso (admin)
 ```
 
-Then install the ISO in a Hyper-V VM (Generation 2; it has no TPM by default, so it also tests the bypasses).
+Then click **Test in VM** on the Build page (needs Hyper-V) and install it there.
 
 ## Known limits
 

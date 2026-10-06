@@ -246,6 +246,11 @@
           <StackPanel Style="{StaticResource Row}"><TextBlock Text="Build" Style="{StaticResource Label}"/><ComboBox x:Name="Build" Width="380"/></StackPanel>
           <TextBlock Style="{StaticResource Hint}" Text="Auto picks the newest build matching your ISO."/>
         </StackPanel></Border>
+        <Border Style="{StaticResource Card}"><StackPanel>
+          <TextBlock Text="STORAGE" Style="{StaticResource Section}"/>
+          <DockPanel><Button x:Name="CleanUp" DockPanel.Dock="Right" Content="Clean up"/>
+            <TextBlock x:Name="StorageText" VerticalAlignment="Center" Foreground="{StaticResource Muted}"/></DockPanel>
+        </StackPanel></Border>
       </StackPanel></ScrollViewer>
 
       <!-- Patches -->
@@ -312,14 +317,22 @@
       <Grid x:Name="PageBuild" Style="{StaticResource Page}" Visibility="Collapsed" Margin="36,30,36,30">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
         <StackPanel><TextBlock Text="Build" Style="{StaticResource H1}"/>
-          <TextBlock Text="Needs about 60 GB free on the project drive. A full build takes a while - the log shows every step." Style="{StaticResource Sub}"/></StackPanel>
-        <Border Grid.Row="1" Style="{StaticResource Card}"><StackPanel>
-          <TextBlock Text="OUTPUT" Style="{StaticResource Section}"/>
-          <DockPanel Margin="0,0,0,12"><Button x:Name="BrowseOut" DockPanel.Dock="Right" Content="Browse"/><TextBox x:Name="Output"/></DockPanel>
-          <CheckBox x:Name="Split" Style="{StaticResource Toggle}" Content="Split install.wim for FAT32 USB sticks" Margin="0"/>
-        </StackPanel></Border>
+          <TextBlock Text="Check the plan, then build. The log shows every step." Style="{StaticResource Sub}"/></StackPanel>
+        <Grid Grid.Row="1">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="3*"/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
+          <Border Style="{StaticResource Card}" Margin="0,0,14,14"><StackPanel>
+            <TextBlock Text="PLAN" Style="{StaticResource Section}"/>
+            <TextBlock x:Name="PlanText" LineHeight="20"/>
+          </StackPanel></Border>
+          <Border Grid.Column="1" Style="{StaticResource Card}"><StackPanel>
+            <TextBlock Text="OUTPUT" Style="{StaticResource Section}"/>
+            <DockPanel Margin="0,0,0,12"><Button x:Name="BrowseOut" DockPanel.Dock="Right" Content="Browse"/><TextBox x:Name="Output"/></DockPanel>
+            <CheckBox x:Name="Split" Style="{StaticResource Toggle}" Content="Split install.wim for FAT32 USB sticks" Margin="0"/>
+          </StackPanel></Border>
+        </Grid>
         <DockPanel Grid.Row="2" Margin="0,4,0,14">
           <Button x:Name="BuildBtn" Style="{StaticResource Primary}" Content="Build ISO" DockPanel.Dock="Right" MinWidth="160"/>
+          <Button x:Name="TestVm" Content="Test in VM" DockPanel.Dock="Right" Margin="0,0,10,0" Padding="18,11" ToolTip="Boot the built ISO in a Hyper-V virtual machine"/>
           <StackPanel VerticalAlignment="Center" Margin="0,0,24,0">
             <TextBlock x:Name="StepText" Text="Ready" Foreground="{StaticResource Muted}" Margin="0,0,0,8"/>
             <ProgressBar x:Name="Progress" Maximum="9"/></StackPanel>

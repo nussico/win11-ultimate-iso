@@ -4,3 +4,4 @@ out/
 cache/
 sources/*
 !sources/.gitkeep
+vm/

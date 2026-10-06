@@ -22,7 +22,8 @@ Assert (($r -join ',') -eq 'Clipchamp.Clipchamp') 'Get-AppsToRemove skips protec
 
 # Registry
 Assert ((Convert-RegPath 'SYSTEM\Setup\LabConfig') -eq 'HKLM\WIM_SYSTEM\Setup\LabConfig') 'Convert-RegPath'
-Assert (-not ($Patches.Values.Reg | Where-Object { $_ -and $_ -notmatch '^(SYSTEM|SOFTWARE|DEFAULT)\\[^|]+\|[^|]+\|(\d+|-)$' })) 'All reg entries well-formed'
+Assert (-not ($Patches.Values.Reg | Where-Object { $_ -and $_ -notmatch '^(SYSTEM|SOFTWARE|DEFAULT)\\[^|]+\|([^|@][^|]*\|(\d+|-)|@\|)$' })) 'All reg entries well-formed'
+Assert (-not ($Patches.Values | Where-Object { -not $_.Desc })) 'Every patch has a description'
 
 $reg = Get-PatchReg $Presets.Recommended.Patches
 Assert ($reg.Count -gt 0 -and -not ($reg | Where-Object { -not $_ -or $_ -notmatch '\|' })) 'Get-PatchReg: no empty entries for patches without Reg (bloatapps)'
@@ -80,6 +81,21 @@ $builds += [pscustomobject]@{ title = 'Windows 11, version 24H2 (26100.9448)'; b
 Assert ((Select-NewestUupBuild $builds).uuid -eq 'b') 'Newest: 25H2 newest revision, skips 26H1 and previews'
 $builds += [pscustomobject]@{ title = 'Windows 11, version 26H2 (26300.1000)'; build = '26300.1000'; uuid = 'f' }
 Assert ((Select-NewestUupBuild $builds).uuid -eq 'f') 'Newest: switches to 26H2 once it exists'
+
+# Build plan (shared by build + GUI)
+function I($b, [string[]]$eds) { [pscustomobject]@{ Path = "x$b.iso"; Lang = 'de-de'; Build = "$b"; Editions = @($eds | ForEach-Object { [pscustomobject]@{ Name = $_ } }) } }
+$c = @{ BaseLang = 'de-de'; Editions = @('Windows 11 Pro'); UseUup = $true; Newest = $true; UupBuild = ''; IsoFolder = 'src' }
+$pl = Get-BuildPlan @(I 26300 'Windows 11 Pro') $builds $c
+Assert ($pl.Base -and -not $pl.Missing -and -not $pl.Error) 'Plan: current ISO is reused, nothing downloaded'
+$pl = Get-BuildPlan @(I 26100 'Windows 11 Pro') $builds $c
+Assert (-not $pl.Base -and $pl.Missing -eq 'Windows 11 Pro' -and $pl.Uup.uuid -eq 'f' -and $pl.Note) 'Plan: older ISO -> download newest'
+$c.UseUup = $false
+$pl = Get-BuildPlan @(I 26100 'Windows 11 Pro') $builds $c
+Assert ($pl.Base -and -not $pl.Error -and $pl.Note -match 'newer') 'Plan: older ISO kept when UUP is off, with a note'
+Assert ((Get-BuildPlan @() $builds $c).Error -match 'No ISO') 'Plan: no ISO and no UUP -> error'
+$c.UseUup = $true; $c.Editions = @('Windows 11 Home', 'Windows 11 Pro')
+$pl = Get-BuildPlan @(I 26300 'Windows 11 Pro') $builds $c
+Assert ($pl.Base -and $pl.Missing -eq 'Windows 11 Home' -and $pl.Uup.build -like '26300.*') 'Plan: missing edition downloaded for the ISO build'
 
 $q = Get-UupRequest @('Windows 11 Pro') $true
 Assert ($q.Body -match 'updates=0' -and $q.Updates -eq 0 -and $q.Edition -eq 'PROFESSIONAL' -and $q.Body -match 'autodl=2') 'Fast mode: no update integration'

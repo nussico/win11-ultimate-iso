@@ -28,10 +28,20 @@ function New-Check($Text, $Style, $Checked = $false) {
 }
 function Select-Folder($Box) { $d = New-Object Windows.Forms.FolderBrowserDialog; if ($d.ShowDialog() -eq 'OK') { $Box.Text = $d.SelectedPath } }
 function Show-Msg($Text, $Icon = 'Information', $Buttons = 'OK') { [Windows.MessageBox]::Show($win, $Text, 'Win11 Ultimate', $Buttons, $Icon) }
+function Write-Log($Msg) { }   # lib helpers log during builds; nothing to log in the GUI thread
+
+# Taskbar progress + flash when a build ends (until the window is focused).
+$win.TaskbarItemInfo = New-Object Windows.Shell.TaskbarItemInfo
+Add-Type -Namespace W11 -Name Native -MemberDefinition @'
+[StructLayout(LayoutKind.Sequential)] public struct FLASHWINFO { public uint cbSize; public IntPtr hwnd; public uint dwFlags; public uint uCount; public uint dwTimeout; }
+[DllImport("user32.dll")] static extern bool FlashWindowEx(ref FLASHWINFO f);
+public static void Flash(IntPtr h) { var f = new FLASHWINFO(); f.cbSize = (uint)Marshal.SizeOf(f); f.hwnd = h; f.dwFlags = 15; f.uCount = uint.MaxValue; FlashWindowEx(ref f); }
+'@
 
 # --- Navigation ---
 $ui.Nav.Add_SelectionChanged({
         foreach ($i in $ui.Nav.Items) { $ui[$i.Tag].Visibility = if ($i.IsSelected) { 'Visible' } else { 'Collapsed' } }
+        if ($ui.Nav.SelectedItem.Tag -eq 'PageBuild') { Update-Plan }
     })
 
 # --- UUP data (best effort; offline still works with own ISOs) ---
@@ -83,7 +93,7 @@ function Update-Editions {
 
 # --- Patches ---
 $patchChecks = @{}
-foreach ($g in 'Setup bypasses', 'Debloat', 'Aggressive', 'Extras') {
+foreach ($g in 'Setup bypasses', 'Debloat', 'Tweaks', 'Aggressive', 'Extras') {
     $card = New-Object Windows.Controls.Border -Property @{ Style = $win.FindResource('Card'); Margin = '0,0,14,14' }
     $sp = New-Object Windows.Controls.StackPanel
     $h = New-Object Windows.Controls.TextBlock -Property @{ Text = $g.ToUpper(); Style = $win.FindResource('Section') }
@@ -91,7 +101,9 @@ foreach ($g in 'Setup bypasses', 'Debloat', 'Aggressive', 'Extras') {
     $sp.Children.Add($h) | Out-Null
     foreach ($id in $Patches.Keys | Where-Object { $Patches[$_].Group -eq $g }) {
         $patchChecks[$id] = New-Check $Patches[$id].Label 'Toggle'
+        $patchChecks[$id].Margin = '0,0,0,2'
         $sp.Children.Add($patchChecks[$id]) | Out-Null
+        $sp.Children.Add((New-Object Windows.Controls.TextBlock -Property @{ Text = $Patches[$id].Desc; Style = $win.FindResource('Hint'); Margin = '50,0,0,14' })) | Out-Null
     }
     $card.Child = $sp; $ui.PatchPanel.Children.Add($card) | Out-Null
 }
@@ -138,16 +150,18 @@ foreach ($c in @($patchChecks.Values) + $ui.SkipOobe + $ui.RunWinUtil) {
     $c.Add_Click({ if (-not $script:applying) { $ui.Preset.SelectedItem = 'Custom' }; Update-Summary })
 }
 
-$ui.ScanIsos.Add_Click({
-        $win.Cursor = 'Wait'
-        $script:IsoInfos = @(Get-SourceIsos $ui.IsoFolder.Text)
-        $win.Cursor = $null
-        $ui.ScanResult.Text = if ($script:IsoInfos) {
-            ($script:IsoInfos | ForEach-Object { "$($_.Lang)  -  build $($_.Build)  -  $($_.Editions.Count) editions  -  $(Split-Path $_.Path -Leaf)" }) -join "`n"
-        } else { 'No ISOs found in this folder.' }
-        if ($script:IsoInfos -and $script:IsoInfos[0].Lang -in $langs) { $ui.BaseLang.SelectedItem = $script:IsoInfos[0].Lang }
-        Update-Editions
-    })
+function Invoke-Scan {
+    $win.Cursor = 'Wait'; $ui.ScanResult.Text = 'Scanning...'
+    $win.Dispatcher.Invoke([action] {}, 'Render')
+    $script:IsoInfos = @(Get-SourceIsos $ui.IsoFolder.Text)
+    $win.Cursor = $null
+    $ui.ScanResult.Text = if ($script:IsoInfos) {
+        ($script:IsoInfos | ForEach-Object { "$($_.Lang)  -  build $($_.Build)  -  $($_.Editions.Count) editions  -  $(Split-Path $_.Path -Leaf)" }) -join "`n"
+    } else { 'No ISOs found in this folder.' }
+    if ($script:IsoInfos -and $script:IsoInfos[0].Lang -in $langs) { $ui.BaseLang.SelectedItem = $script:IsoInfos[0].Lang }
+    Update-Editions; Update-Storage
+}
+$ui.ScanIsos.Add_Click({ Invoke-Scan })
 $ui.BaseLang.Add_SelectionChanged({ Update-Editions })
 $ui.UseUup.Add_Click({ Update-Editions })
 
@@ -172,7 +186,7 @@ function Get-Config {
 }
 
 function Test-Config($c) {
-    if (-not $c.Editions) { return 'Select at least one edition (Editions page - scan your ISOs or turn on UUP dump).' }
+    if (-not $c.Editions) { return 'Select at least one edition (Source page - scan your ISOs or turn on UUP dump).' }
     if (-not $c.BaseLang) { return 'Select a base language.' }
     if ($c.Output -notmatch '\.iso$') { return 'Output must be an .iso file.' }
     if ('drivers' -in $c.Patches -and -not (Test-Path $c.DriversPath)) { return 'Driver folder does not exist.' }
@@ -187,6 +201,89 @@ function Test-Config($c) {
     }
 }
 
+# --- Plan (same decision logic as the build) ---
+function Update-Plan {
+    try {
+        $cfg = Get-Config
+        if (-not $cfg.Editions) { $ui.PlanText.Text = 'Pick at least one edition on the Source page.'; return }
+        $p = Get-BuildPlan $script:IsoInfos $script:UupBuilds $cfg
+        $lines = @()
+        if ($p.Error) { $lines += "PROBLEM: $($p.Error)" }
+        if ($p.Note) { $lines += $p.Note }
+        if ($p.Base) { $lines += "Source: your ISO $(Split-Path $p.Base.Path -Leaf) (build $($p.Base.Build))" }
+        if ($p.Missing -and $p.Uup) {
+            $lines += "Download: $($p.Missing -join ', ') from UUP dump, $($p.Uup.title), " +
+                $(if ($cfg.Fast) { 'fast mode (about 15 min, older base build)' } else { 'with the latest update (about 60 min)' })
+        }
+        $lines += "Editions: $($cfg.Editions -join ', ')  ($($cfg.BaseLang))"
+        $lines += "Patches: $($cfg.Patches.Count) selected$(if ($cfg.Unattend.Enabled) { ', unattended setup' })"
+        $min = 2 + 10 * $cfg.Editions.Count + $(if ($p.Missing) { if ($cfg.Fast) { 15 } else { 60 } } else { 0 })
+        $lines += "Time: about $min minutes"
+        $drive = Get-PSDrive $root.Substring(0, 1)
+        $lines += "Disk: needs 60 GB free on $($root.Substring(0, 2)), you have $([math]::Round($drive.Free / 1GB)) GB$(if ($drive.Free -lt 60GB) { '  - NOT ENOUGH' })"
+        $ui.PlanText.Text = $lines -join "`n"
+    } catch { $ui.PlanText.Text = "Plan not available: $_" }
+}
+
+# --- Storage ---
+function Get-FolderGB($Path) {
+    if (-not (Test-Path $Path)) { return 0 }
+    [math]::Round(((Get-ChildItem $Path -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum) / 1GB, 1)
+}
+# UUP downloads (they have a .build sidecar) replaced by a newer ISO of the same language. Your own ISOs are never touched.
+function Get-OldDownloads {
+    $script:IsoInfos | Where-Object { Test-Path "$($_.Path).build" } | Where-Object {
+        $i = $_; $script:IsoInfos | Where-Object { $_.Lang -eq $i.Lang -and [int]$_.Build -gt [int]$i.Build } }
+}
+function Update-Storage {
+    $old = @(Get-OldDownloads)
+    $left = (Get-FolderGB "$root\work") + (Get-FolderGB "$root\cache")
+    $ui.StorageText.Text = "ISOs: $(Get-FolderGB $ui.IsoFolder.Text) GB   |   built: $(Get-FolderGB "$root\out") GB   |   temp leftovers: $left GB   |   test VM: $(Get-FolderGB "$root\vm") GB" +
+        $(if ($old) { "   |   $($old.Count) outdated download(s)" })
+}
+$ui.CleanUp.Add_Click({
+        if ($script:job) { Show-Msg 'Wait until the build is finished.' | Out-Null; return }
+        $old = @(Get-OldDownloads)
+        $list = @('Temporary build files (work, cache)') + @($old | ForEach-Object { "Outdated download: $(Split-Path $_.Path -Leaf)" })
+        if ((Show-Msg "Delete:`n- $($list -join "`n- ")`n`nYour own ISOs, the newest downloads and built ISOs are kept." 'Question' 'YesNo') -ne 'Yes') { return }
+        $win.Cursor = 'Wait'
+        try {
+            Get-WindowsImage -Mounted -ErrorAction SilentlyContinue | Where-Object Path -like "$root\work*" | ForEach-Object { Dismount-WindowsImage -Path $_.Path -Discard | Out-Null }
+            foreach ($d in "$root\work", "$root\cache") { Remove-ImagePath $d }
+            foreach ($o in $old) { Remove-Item $o.Path, "$($o.Path).build" -Force }
+        } catch { Show-Msg "Clean up incomplete: $_" 'Warning' | Out-Null }
+        $win.Cursor = $null
+        Invoke-Scan
+    })
+
+# --- Test in VM (Hyper-V) ---
+$vmName = 'Win11 Ultimate Test'
+$ui.TestVm.Add_Click({
+        $iso = $ui.Output.Text
+        if (-not (Test-Path $iso)) { Show-Msg 'Build the ISO first.' 'Warning' | Out-Null; return }
+        if (-not (Get-Command Hyper-V\New-VM -ErrorAction SilentlyContinue) -or -not (Get-Service vmms -ErrorAction SilentlyContinue)) {
+            Show-Msg "Hyper-V is not turned on.`n`nOpen 'Turn Windows features on or off', tick Hyper-V (needs Windows Pro), restart and try again." 'Warning' | Out-Null; return
+        }
+        if (Hyper-V\Get-VM $vmName -ErrorAction SilentlyContinue) {
+            if ((Show-Msg "Replace the existing test VM '$vmName'? Its virtual disk is deleted." 'Question' 'YesNo') -ne 'Yes') { return }
+            Hyper-V\Stop-VM $vmName -TurnOff -Force -ErrorAction SilentlyContinue; Hyper-V\Remove-VM $vmName -Force
+        }
+        $win.Cursor = 'Wait'
+        try {
+            if (Test-Path "$root\vm") { Remove-Item "$root\vm" -Recurse -Force }
+            $vmArgs = @{ Name = $vmName; Generation = 2; MemoryStartupBytes = 4GB; Path = "$root\vm"; NewVHDPath = "$root\vm\disk.vhdx"; NewVHDSizeBytes = 80GB }
+            if (Hyper-V\Get-VMSwitch 'Default Switch' -ErrorAction SilentlyContinue) { $vmArgs.SwitchName = 'Default Switch' }
+            $vm = Hyper-V\New-VM @vmArgs
+            Hyper-V\Set-VM $vm -ProcessorCount ([math]::Min(4, [Environment]::ProcessorCount)) -AutomaticCheckpointsEnabled $false
+            $dvd = Hyper-V\Add-VMDvdDrive -VM $vm -Path $iso -Passthru
+            Hyper-V\Set-VMFirmware -VM $vm -FirstBootDevice $dvd
+            Start-Process vmconnect.exe -ArgumentList 'localhost', "`"$vmName`""
+            Show-Msg ("Test VM '$vmName' created (4 GB RAM, 80 GB disk, no TPM - that tests the hardware-check bypass).`n`n" +
+                "In the VM window click Start, then quickly press a key when it says 'Press any key to boot from CD or DVD'.") | Out-Null
+        } catch { Show-Msg "Could not create the VM:`n$_" 'Error' | Out-Null }
+        finally { $win.Cursor = $null; Update-Storage }
+    })
+
 # --- Build run (background runspace, polled by a timer) ---
 $script:job = $null
 $timer = New-Object Windows.Threading.DispatcherTimer -Property @{ Interval = [TimeSpan]::FromMilliseconds(300) }
@@ -200,6 +297,7 @@ $timer.Add_Tick({
             $ui.Progress.BeginAnimation([Windows.Controls.ProgressBar]::ValueProperty, (New-Object Windows.Media.Animation.DoubleAnimation $s, ([Windows.Duration][TimeSpan]::FromMilliseconds(500))))
         }
         # Running clocks show the build is alive during long silent DISM operations.
+        $win.TaskbarItemInfo.ProgressState = 'Normal'; $win.TaskbarItemInfo.ProgressValue = $s / 9
         if ($s -gt 0) { $ui.StepText.Text = "Step $s of 9 - $($stepNames[$s - 1])   |   {0:mm\:ss} in this step   |   {1:hh\:mm\:ss} total" -f ((Get-Date) - $script:stepStart), ((Get-Date) - $script:buildStart) }
         if ($script:sync.Done -or $script:job.Handle.IsCompleted) {
             if (-not $script:sync.Done -and -not $script:sync.Error) { $script:sync.Error = 'The build stopped unexpectedly. See the log.' }
@@ -208,6 +306,9 @@ $timer.Add_Tick({
             try { $script:job.PS.EndInvoke($script:job.Handle) } catch { $ui.Log.AppendText("$_`r`n") }
             $script:job.PS.Runspace.Close(); $script:job.PS.Dispose(); $script:job = $null
             $ui.BuildBtn.Content = 'Build ISO'; $ui.BuildBtn.Tag = $null; $ui.BuildBtn.IsEnabled = $true
+            $win.TaskbarItemInfo.ProgressState = if ($script:sync.Error) { 'Error' } else { 'None' }; $win.TaskbarItemInfo.ProgressValue = 1
+            if (-not $win.IsActive) { [W11.Native]::Flash((New-Object Windows.Interop.WindowInteropHelper $win).Handle) }
+            Update-Storage
             if ($script:sync.Error) { $ui.StepText.Text = 'Failed'; Show-Msg "Build failed:`n$($script:sync.Error)`n`nDetails: build-log.txt next to the ISO." 'Error' | Out-Null }
             else { $ui.StepText.Text = 'Done'; Show-Msg "ISO ready:`n$($ui.Output.Text)" | Out-Null }
         }
@@ -226,6 +327,7 @@ $ui.BuildBtn.Add_Click({
                     else { 'Any PC booted from this ISO with one clear best disk will have that disk ERASED after a 10 second countdown.' }
             if ((Show-Msg "Automatic install is ON.`n`n$what`n`nBuild anyway?" 'Warning' 'YesNo') -ne 'Yes') { return }
         }
+        try { Hyper-V\Get-VMDvdDrive -VMName $vmName -ErrorAction Stop | Where-Object Path -eq $cfg.Output | Hyper-V\Set-VMDvdDrive -Path $null } catch { }
         $ui.Log.Clear(); $ui.Progress.BeginAnimation([Windows.Controls.ProgressBar]::ValueProperty, $null); $ui.Progress.Value = 0; $script:shownStep = 0; $script:buildStart = Get-Date; $ui.StepText.Text = 'Starting...'
         $script:sync = [hashtable]::Synchronized(@{ Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]'; Step = 0; Cancel = $false; Done = $false; Error = $null })
         $ps = [powershell]::Create()
@@ -246,4 +348,5 @@ $win.Add_Closing({
 
 $ui.Preset.SelectedItem = 'Recommended'
 Update-Editions
+$win.Add_ContentRendered({ Invoke-Scan })
 $win.ShowDialog() | Out-Null

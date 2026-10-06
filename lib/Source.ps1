@@ -39,8 +39,36 @@ function Get-IsoInfo($Path) {
 
 function Get-SourceIsos($Folder) {
     foreach ($iso in Get-ChildItem $Folder -Filter *.iso -ErrorAction SilentlyContinue) {
-        try { Get-IsoInfo $iso.FullName } catch { Write-Warning "$($iso.Name): $_" }
+        try {
+            $info = Get-IsoInfo $iso.FullName
+            # Fast-mode UUP ISOs hold the older base build (e.g. 26100); the sidecar records the release they came from.
+            if (Test-Path "$($iso.FullName).build") { $info.Build = (Get-Content "$($iso.FullName).build").Split('.')[0] }
+            $info
+        } catch { Write-Warning "$($iso.Name): $_" }
     }
+}
+
+# What a build will use: base ISO, editions to download, UUP build. Shared by the build and the GUI's plan.
+function Get-BuildPlan($Isos, $Builds, $Cfg) {
+    $p = @{ Base = $null; Newest = (Select-NewestUupBuild $Builds); Missing = @(); Uup = $null; Note = $null; Error = $null }
+    $p.Base = $Isos | Where-Object Lang -eq $Cfg.BaseLang | Sort-Object { [int]$_.Build } -Descending | Select-Object -First 1
+    if ($Cfg.Newest -and $p.Base -and $p.Newest -and [int]$p.Base.Build -lt [int]$p.Newest.build.Split('.')[0]) {
+        if ($Cfg.UseUup) { $p.Note = "Your ISO is build $($p.Base.Build) (older version): downloading the newest instead"; $p.Base = $null }
+        else { $p.Note = "NOTE: a newer Windows version exists ($($p.Newest.title)); turn on UUP dump to use it" }
+    }
+    $p.Missing = @($Cfg.Editions | Where-Object { -not $p.Base -or $_ -notin $p.Base.Editions.Name })
+    if (-not $p.Missing) { return $p }
+    if (-not $Cfg.UseUup) {
+        $p.Error = if (-not $p.Base) { "No ISO for language $($Cfg.BaseLang) in $($Cfg.IsoFolder). Add one or turn on UUP dump." }
+        else { "Editions not in your ISO: $($p.Missing -join ', '). Turn on UUP dump or untick them." }
+        return $p
+    }
+    $major = if ($p.Base) { $p.Base.Build } elseif ($p.Newest) { $p.Newest.build.Split('.')[0] }
+    if (-not $major) { $p.Error = 'Could not reach UUP dump'; return $p }
+    $p.Uup = if ($Cfg.UupBuild) { $Builds | Where-Object uuid -eq $Cfg.UupBuild } else { Select-UupBuild $Builds $major }
+    if (-not $p.Uup) { $p.Error = "No UUP dump build found for build $major" }
+    elseif ($p.Uup.build.Split('.')[0] -ne $major) { $p.Error = "UUP build $($p.Uup.build) does not match ISO build $major. Pick a $major build." }
+    $p
 }
 
 function Get-UupBuilds {

@@ -1,5 +1,6 @@
 # Patch catalog, app lists and presets.
-# Reg entries: 'HIVE\Key|Name|Value'  (HIVE = SYSTEM, SOFTWARE or DEFAULT; Value '-' deletes the value)
+# Reg entries: 'HIVE\Key|Name|Value'  (HIVE = SYSTEM, SOFTWARE or DEFAULT; DWORD values; Value '-' deletes the value;
+#   Name '@' with no value = empty default value)
 
 $RemoveApps = @(
     'Clipchamp.Clipchamp', 'Microsoft.BingNews', 'Microsoft.BingWeather', 'Microsoft.Getstarted',
@@ -27,48 +28,83 @@ $CdmOff = 'ContentDeliveryAllowed', 'SilentInstalledAppsEnabled', 'SystemPaneSug
     ForEach-Object { "DEFAULT\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager|$_|0" }
 
 $Patches = [ordered]@{
-    hwchecks     = @{ Group = 'Setup bypasses'; Label = 'Skip TPM/SecureBoot/RAM/CPU checks'; Boot = $true; Reg = @(
+    hwchecks     = @{ Group = 'Setup bypasses'; Label = 'Skip TPM/SecureBoot/RAM/CPU checks'; Boot = $true
+        Desc = 'Installs on PCs without TPM 2.0, Secure Boot, 4 GB RAM or a supported CPU.'; Reg = @(
             'SYSTEM\Setup\LabConfig|BypassTPMCheck|1', 'SYSTEM\Setup\LabConfig|BypassSecureBootCheck|1',
             'SYSTEM\Setup\LabConfig|BypassRAMCheck|1', 'SYSTEM\Setup\LabConfig|BypassCPUCheck|1',
             'SYSTEM\Setup\LabConfig|BypassStorageCheck|1', 'SYSTEM\Setup\MoSetup|AllowUpgradesWithUnsupportedTPMOrCPU|1') }
-    localaccount = @{ Group = 'Setup bypasses'; Label = 'Local account (BypassNRO)'; Reg = @(
+    localaccount = @{ Group = 'Setup bypasses'; Label = 'Local account (BypassNRO)'
+        Desc = 'Setup works without internet and without a Microsoft account.'; Reg = @(
             'SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE|BypassNRO|1') }
-    skipprivacy  = @{ Group = 'Setup bypasses'; Label = 'Skip privacy screens'; Reg = @(
+    skipprivacy  = @{ Group = 'Setup bypasses'; Label = 'Skip privacy screens'
+        Desc = 'Skips the privacy settings questions (location, ads ID, diagnostics) during setup.'; Reg = @(
             'SOFTWARE\Policies\Microsoft\Windows\OOBE|DisablePrivacyExperience|1') }
-    nobitlocker  = @{ Group = 'Setup bypasses'; Label = 'No automatic BitLocker'; Reg = @(
+    nobitlocker  = @{ Group = 'Setup bypasses'; Label = 'No automatic BitLocker'
+        Desc = 'Windows does not encrypt the drive on its own. You can still turn BitLocker on later.'; Reg = @(
             'SYSTEM\ControlSet001\Control\BitLocker|PreventDeviceEncryption|1') }
 
-    bloatapps    = @{ Group = 'Debloat'; Label = 'Remove bloat apps'; Action = { param($m, $c) Remove-Apps $m $RemoveApps } }
-    xboxapp      = @{ Group = 'Debloat'; Label = 'Remove Xbox app'; Action = { param($m, $c) Remove-Apps $m @('Microsoft.GamingApp') } }
-    telemetry    = @{ Group = 'Debloat'; Label = 'Disable telemetry'; Reg = @(
+    bloatapps    = @{ Group = 'Debloat'; Label = 'Remove bloat apps'
+        Desc = 'Removes: ' + (($RemoveApps | ForEach-Object { $_.Split('.')[-1] }) -join ', ') + '. Store, Calculator, Photos, Xbox login and Game Bar are always kept.'
+        Action = { param($m, $c) Remove-Apps $m $RemoveApps } }
+    xboxapp      = @{ Group = 'Debloat'; Label = 'Remove Xbox app'
+        Desc = 'Removes only the Xbox app. Xbox login and Game Bar stay, so games keep working.'
+        Action = { param($m, $c) Remove-Apps $m @('Microsoft.GamingApp') } }
+    telemetry    = @{ Group = 'Debloat'; Label = 'Disable telemetry'
+        Desc = 'Turns off diagnostic data and the tracking services (DiagTrack, WAP push).'; Reg = @(
             'SOFTWARE\Policies\Microsoft\Windows\DataCollection|AllowTelemetry|0',
             'SYSTEM\ControlSet001\Services\DiagTrack|Start|4', 'SYSTEM\ControlSet001\Services\dmwappushservice|Start|4') }
-    adscopilot   = @{ Group = 'Debloat'; Label = 'Disable ads, tips and Copilot'; Reg = @(
+    adscopilot   = @{ Group = 'Debloat'; Label = 'Disable ads, tips and Copilot'
+        Desc = 'Turns off Copilot, Start menu recommendations, suggested apps, tips and silently installed apps.'; Reg = @(
             'SOFTWARE\Policies\Microsoft\Windows\CloudContent|DisableWindowsConsumerFeatures|1',
             'SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot|TurnOffWindowsCopilot|1',
             'DEFAULT\Software\Policies\Microsoft\Windows\WindowsCopilot|TurnOffWindowsCopilot|1',
             'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|Start_IrisRecommendations|0') + $CdmOff }
-    onedrive     = @{ Group = 'Debloat'; Label = 'Remove OneDrive'; Reg = @(
+    onedrive     = @{ Group = 'Debloat'; Label = 'Remove OneDrive'
+        Desc = 'OneDrive is not installed for new users. You can still get it from the Store later.'; Reg = @(
             'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Run|OneDriveSetup|-')
         Action = { param($m, $c) Remove-ImagePath "$m\Windows\System32\OneDriveSetup.exe" } }
 
-    edge         = @{ Group = 'Aggressive'; Label = 'Remove Edge (keeps WebView2)'; Reg = @(
+    classicmenu  = @{ Group = 'Tweaks'; Label = 'Classic right-click menu'
+        Desc = 'The full Windows 10 style context menu, without clicking "Show more options".'; Reg = @(
+            'DEFAULT\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32|@|') }
+    taskbarleft  = @{ Group = 'Tweaks'; Label = 'Taskbar icons on the left'
+        Desc = 'Start button and taskbar icons on the left like Windows 10, instead of centered.'; Reg = @(
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|TaskbarAl|0') }
+    fileext      = @{ Group = 'Tweaks'; Label = 'Show file extensions'
+        Desc = 'Shows .exe, .pdf, .jpg and so on in Explorer. Makes fake files like "photo.jpg.exe" easy to spot.'; Reg = @(
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|HideFileExt|0') }
+    endtask      = @{ Group = 'Tweaks'; Label = '"End task" in taskbar menu'
+        Desc = 'Right-click a frozen app on the taskbar and choose End task, no Task Manager needed.'; Reg = @(
+            'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\TaskbarDeveloperSettings|TaskbarEndTask|1') }
+    nobing       = @{ Group = 'Tweaks'; Label = 'No Bing in Start search'
+        Desc = 'Start menu search only finds apps, files and settings on your PC, no web results.'; Reg = @(
+            'DEFAULT\Software\Policies\Microsoft\Windows\Explorer|DisableSearchBoxSuggestions|1') }
+    nowidgets    = @{ Group = 'Tweaks'; Label = 'Disable widgets'
+        Desc = 'Removes the news and weather widgets board from the taskbar.'; Reg = @(
+            'SOFTWARE\Policies\Microsoft\Dsh|AllowNewsAndInterests|0') }
+
+    edge         = @{ Group = 'Aggressive'; Label = 'Remove Edge (keeps WebView2)'
+        Desc = 'Deletes Microsoft Edge. WebView2 stays so apps keep working. You need another browser; Windows Update may bring Edge back.'; Reg = @(
             'SOFTWARE\Policies\Microsoft\EdgeUpdate|DoNotUpdateToEdgeWithChromium|1')
         Action = { param($m, $c) 'Edge', 'EdgeUpdate', 'EdgeCore' | ForEach-Object { Remove-ImagePath "$m\Program Files (x86)\Microsoft\$_" } } }
-    defender     = @{ Group = 'Aggressive'; Label = 'Disable Defender'; Reg = @(
+    defender     = @{ Group = 'Aggressive'; Label = 'Disable Defender'
+        Desc = 'Turns off Microsoft Defender antivirus completely. Only use this with another antivirus.'; Reg = @(
             'WinDefend', 'WdNisSvc', 'WdFilter', 'WdBoot', 'Sense' | ForEach-Object { "SYSTEM\ControlSet001\Services\$_|Start|4" }) + @(
             'SOFTWARE\Policies\Microsoft\Windows Defender|DisableAntiSpyware|1') + (
             'DisableRealtimeMonitoring', 'DisableBehaviorMonitoring', 'DisableOnAccessProtection', 'DisableScanOnRealtimeEnable' |
             ForEach-Object { "SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection|$_|1" }) }
-    recall       = @{ Group = 'Aggressive'; Label = 'Disable Recall/AI'; Reg = @(
+    recall       = @{ Group = 'Aggressive'; Label = 'Disable Recall/AI'
+        Desc = 'Removes Recall (screenshots of your activity) and turns off AI data analysis.'; Reg = @(
             'SOFTWARE\Policies\Microsoft\Windows\WindowsAI|DisableAIDataAnalysis|1')
         Action = { param($m, $c)
             if (Get-WindowsOptionalFeature -Path $m | Where-Object FeatureName -eq 'Recall') {
                 Disable-WindowsOptionalFeature -Path $m -FeatureName Recall -Remove | Out-Null } } }
 
     drivers      = @{ Group = 'Extras'; Label = 'Add drivers from folder'
+        Desc = 'Adds every driver in the folder below, e.g. network or storage drivers setup does not have.'
         Action = { param($m, $c) Add-WindowsDriver -Path $m -Driver $c.DriversPath -Recurse | Out-Null } }
     winutil      = @{ Group = 'Extras'; Label = 'CTT WinUtil shortcut on desktop'
+        Desc = 'Puts a Chris Titus Tech WinUtil shortcut on the desktop for more tweaks after setup.'
         Action = { param($m, $c)
             $lnk = "$m\Users\Public\Desktop\CTT WinUtil.lnk"
             New-Item -ItemType Directory -Force (Split-Path $lnk) | Out-Null
@@ -78,10 +114,11 @@ $Patches = [ordered]@{
             $s.Save() } }
 }
 
+$Tweaks = 'classicmenu', 'taskbarleft', 'fileext', 'endtask', 'nobing', 'nowidgets'
 $Presets = [ordered]@{
     Basic       = @{ Patches = 'hwchecks', 'localaccount', 'skipprivacy', 'nobitlocker' }
-    Recommended = @{ Patches = 'hwchecks', 'localaccount', 'skipprivacy', 'nobitlocker', 'bloatapps', 'telemetry', 'adscopilot', 'onedrive' }
-    CTT         = @{ Patches = 'hwchecks', 'localaccount', 'skipprivacy', 'nobitlocker', 'bloatapps', 'telemetry', 'adscopilot', 'onedrive', 'winutil'
+    Recommended = @{ Patches = @('hwchecks', 'localaccount', 'skipprivacy', 'nobitlocker', 'bloatapps', 'telemetry', 'adscopilot', 'onedrive', 'fileext', 'endtask', 'nobing') }
+    CTT         = @{ Patches = @('hwchecks', 'localaccount', 'skipprivacy', 'nobitlocker', 'bloatapps', 'telemetry', 'adscopilot', 'onedrive', 'winutil') + $Tweaks
         Unattend = @{ Enabled = $true; SkipOobe = $true; RunWinUtil = $true } }
     Extreme     = @{ Patches = @($Patches.Keys | Where-Object { $_ -ne 'drivers' })
         Unattend = @{ Enabled = $true; SkipOobe = $true; RunWinUtil = $true } }
@@ -150,6 +187,7 @@ function Set-OfflineReg([string[]]$Entries) {
         $path, $name, $value = $e -split '\|'
         $key = Convert-RegPath $path
         if ($value -eq '-') { reg delete $key /v $name /f 2>&1 | Out-Null; Write-Log "  reg delete $path\$name" }
+        elseif ($name -eq '@') { reg add $key /ve /f 2>&1 | Out-Null; if ($LASTEXITCODE) { throw "reg add failed: $e" }; Write-Log "  reg $path\(Default) = (empty)" }   # empty default value
         else { reg add $key /v $name /t REG_DWORD /d $value /f 2>&1 | Out-Null; if ($LASTEXITCODE) { throw "reg add failed: $e" }; Write-Log "  reg $path\$name = $value" }
         if ($script:Report) { $script:Report.Reg++ }
     }

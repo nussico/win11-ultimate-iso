@@ -125,36 +125,15 @@ function Invoke-Build($Cfg, $Sync) {
         $peOcs = if ($Cfg.Unattend.Enabled -and $Cfg.Unattend.AutoInstall -eq 'BestSsd') { Get-WinPEOcs }
 
         Enter-Step 2 'Sources'
-        $found = @(Get-SourceIsos $Cfg.IsoFolder | ForEach-Object {
-            # Fast-mode UUP ISOs hold the older base build (e.g. 26100); the sidecar records the release they came from.
-            if (Test-Path "$($_.Path).build") { $_.Build = (Get-Content "$($_.Path).build").Split('.')[0] }; $_
-        })
+        $found = @(Get-SourceIsos $Cfg.IsoFolder)
         foreach ($f in $found) { Write-Log "Found ISO $(Split-Path $f.Path -Leaf): build $($f.Build), $($f.Lang), $($f.Editions.Name -join ', ')" }
         if (-not $found) { Write-Log "No ISOs in $($Cfg.IsoFolder)" }
-        $base = $found | Where-Object Lang -eq $Cfg.BaseLang | Sort-Object { [int]$_.Build } -Descending | Select-Object -First 1
-        $builds = $null; $newest = $null
-        if ($Cfg.UseUup) {
-            $builds = Get-UupBuilds
-            $newest = Select-NewestUupBuild $builds
-            if ($newest) { Write-Log "Newest Windows: $($newest.title)" }
-        }
-        if ($Cfg.Newest -and $base -and $newest -and [int]$base.Build -lt [int]$newest.build.Split('.')[0]) {
-            if ($Cfg.UseUup) { Write-Log "Your ISO is build $($base.Build) (older version): downloading the newest instead"; $base = $null }
-            else { Write-Log "NOTE: a newer Windows version exists ($($newest.title)); turn on UUP dump to use it" }
-        }
-        $missing = @($Cfg.Editions | Where-Object { -not $base -or $_ -notin $base.Editions.Name })
-        if ($missing -and -not $Cfg.UseUup) {
-            if (-not $base) { throw "No ISO for base language $($Cfg.BaseLang) in $($Cfg.IsoFolder). Add one or enable UUP dump." }
-            throw "Editions not in your ISO: $($missing -join ', '). Enable UUP dump or untick them."
-        }
-        $major = if ($base) { $base.Build } elseif ($newest) { $newest.build.Split('.')[0] } else { throw 'Could not reach UUP dump' }
-        $uup = $null
-        if ($missing) {
-            $uup = if ($Cfg.UupBuild) { $builds | Where-Object uuid -eq $Cfg.UupBuild } else { Select-UupBuild $builds $major }
-            if (-not $uup) { throw "No UUP dump build found for build $major" }
-            if ($uup.build.Split('.')[0] -ne $major) { throw "UUP build $($uup.build) does not match ISO build $major. Pick a $major build." }
-            Write-Log "UUP build: $($uup.title)"
-        }
+        $plan = Get-BuildPlan $found $(if ($Cfg.UseUup) { Get-UupBuilds } else { @() }) $Cfg
+        if ($plan.Newest) { Write-Log "Newest Windows: $($plan.Newest.title)" }
+        if ($plan.Note) { Write-Log $plan.Note }
+        if ($plan.Error) { throw $plan.Error }
+        $base = $plan.Base; $missing = $plan.Missing; $uup = $plan.Uup
+        if ($uup) { Write-Log "UUP build: $($uup.title)" }
         $sources = @()   # @{ Iso; Name }
         if ($base) {
             Write-Log "Base ISO: $($base.Path)"
