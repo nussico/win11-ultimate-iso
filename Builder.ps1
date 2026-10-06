@@ -81,13 +81,25 @@ function Update-Editions {
     foreach ($e in $all) {
         $label = if ($e -in $names) { $e } else { "$e  (UUP)" }
         $script:edChecks[$e] = New-Check $label 'Chip' ($e -in $checked)
-        $script:edChecks[$e].Add_Click({ Update-Summary })
+        $script:edChecks[$e].Add_Click({ Update-Summary; Update-BuildHint })
         $ui.EditionPanel.Children.Add($script:edChecks[$e]) | Out-Null
         $ui.Edition.Items.Add($e) | Out-Null
     }
     $ui.Edition.SelectedItem = if ($prevEdition -in $all) { $prevEdition } else { 'Windows 11 Pro' }
     if (-not $all) { $ui.EditionPanel.Children.Add((New-Object Windows.Controls.TextBlock -Property @{ Text = 'No editions yet - scan your ISOs or turn on UUP dump.' })) | Out-Null }
-    Update-Summary
+    Update-Summary; Update-BuildHint
+}
+
+# Spells out which build "Auto" resolves to (same logic as the build plan).
+function Update-BuildHint {
+    if ($ui.Build.SelectedIndex -gt 0) { $ui.BuildHint.Text = 'Downloads exactly this build when editions are missing.'; return }
+    try {
+        $p = Get-BuildPlan $script:IsoInfos $script:UupBuilds (Get-Config)
+        $b = if ($p.Uup) { $p.Uup } elseif ($p.Base) { Select-UupBuild $script:UupBuilds $p.Base.Build } else { $p.Newest }
+        $ui.BuildHint.Text = if (-not $b) { 'Auto: UUP dump not reachable, only your ISOs are used.' }
+        elseif ($p.Base -and -not $p.Missing) { "Auto = $($b.title)  (not needed now: your ISO has all selected editions)" }
+        else { "Auto = $($b.title)" }
+    } catch { $ui.BuildHint.Text = 'Auto picks the newest build matching your ISO.' }
 }
 
 # --- Patches ---
@@ -175,6 +187,8 @@ function Invoke-Scan {
 $ui.ScanIsos.Add_Click({ Invoke-Scan })
 $ui.BaseLang.Add_SelectionChanged({ Update-Editions })
 $ui.UseUup.Add_Click({ Update-Editions })
+$ui.Build.Add_SelectionChanged({ Update-BuildHint })
+$ui.Newest.Add_Click({ Update-BuildHint })
 
 # --- Config + validation ---
 function Get-Config {
