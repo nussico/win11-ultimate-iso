@@ -24,6 +24,9 @@ Assert (($r -join ',') -eq 'Clipchamp.Clipchamp') 'Get-AppsToRemove skips protec
 Assert ((Convert-RegPath 'SYSTEM\Setup\LabConfig') -eq 'HKLM\WIM_SYSTEM\Setup\LabConfig') 'Convert-RegPath'
 Assert (-not ($Patches.Values.Reg | Where-Object { $_ -and $_ -notmatch '^(SYSTEM|SOFTWARE|DEFAULT)\\[^|]+\|[^|]+\|(\d+|-)$' })) 'All reg entries well-formed'
 
+$reg = Get-PatchReg $Presets.Recommended.Patches
+Assert ($reg.Count -gt 0 -and -not ($reg | Where-Object { -not $_ -or $_ -notmatch '\|' })) 'Get-PatchReg: no empty entries for patches without Reg (bloatapps)'
+
 # Unattend
 $u = @{ UserName = 'User'; Password = 'p<w'; Admin = $true; AutoLogon = $true; ComputerName = ''; TimeZone = 'W. Europe Standard Time'
     Keyboard = 'de-DE'; Locale = 'de-DE'; SkipOobe = $true; Edition = 'Windows 11 Pro'; AutoInstall = 'Off'; RunWinUtil = $true; CustomScript = ''; EnableAdmin = $false }
@@ -71,6 +74,8 @@ $builds += [pscustomobject]@{ title = 'Windows 11, version 24H2 (26100.9448)'; b
 Assert ((Select-NewestUupBuild $builds).uuid -eq 'b') 'Newest: 25H2 newest revision, skips 26H1 and previews'
 $builds += [pscustomobject]@{ title = 'Windows 11, version 26H2 (26300.1000)'; build = '26300.1000'; uuid = 'f' }
 Assert ((Select-NewestUupBuild $builds).uuid -eq 'f') 'Newest: switches to 26H2 once it exists'
+
+Assert ((Get-CapabilityLang 'en-us') -eq 'en-US' -and (Get-CapabilityLang 'sr-latn-rs') -eq 'sr-Latn-RS') 'Capability language casing'
 
 # Background build wiring (same pattern as Builder.ps1). Cancel is preset, so nothing is built.
 $sync = [hashtable]::Synchronized(@{ Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]'; Step = 0; Cancel = $true; Done = $false; Error = $null })

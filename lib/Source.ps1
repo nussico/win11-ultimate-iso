@@ -88,15 +88,27 @@ function Save-UupLanguagePack($Uuid, $Lang, $Dest) {
         New-Item -ItemType Directory -Force $lp | Out-Null
         Expand-WindowsImage -ImagePath $esd.FullName -Index 1 -ApplyPath $lp | Out-Null
     }
-    @{ Build = $r.build; Lp = $lp; Fods = @(Get-ChildItem $dir -Filter *.cab | Sort-Object { $_.Name -notmatch 'Basic' } | ForEach-Object FullName) }
+    # FoDs install as capabilities from a source folder that uses the canonical repository file names.
+    $fod = New-Item -ItemType Directory -Force "$dir\fod"
+    $features = @()
+    foreach ($feat in 'Basic', 'Handwriting', 'OCR') {
+        $cab = Get-ChildItem $dir -Filter "*LanguageFeatures-$feat-*.cab" | Select-Object -First 1
+        if (-not $cab) { continue }
+        Copy-Item $cab.FullName "$fod\Microsoft-Windows-LanguageFeatures-$feat-$Lang-Package~31bf3856ad364e35~amd64~~.cab" -Force
+        $features += "Language.$feat~~~$(Get-CapabilityLang $Lang)~0.0.1.0"
+    }
+    @{ Build = $r.build; Lp = $lp; FodDir = $fod.FullName; Capabilities = $features }
 }
+
+# 'en-us' -> 'en-US', 'sr-latn-rs' -> 'sr-Latn-RS' (casing used in capability names)
+function Get-CapabilityLang($Lang) { [Globalization.CultureInfo]::GetCultureInfo($Lang).Name }
 
 # Builds an ISO with UUP dump's own download+convert package. Returns the ISO path.
 function Save-UupIso($Uuid, $Lang, [string[]]$EditionNames, $Dest) {
     $direct = @($EditionNames | ForEach-Object { $UupEditions[$_].Uup } | Where-Object { $_ })
     $virtual = @($EditionNames | ForEach-Object { $UupEditions[$_].Virtual } | Where-Object { $_ })
     if ($virtual -and 'PROFESSIONAL' -notin $direct) { $direct += 'PROFESSIONAL' }
-    $body = "autodl=$(if ($virtual) { 3 } else { 2 })&updates=1&cleanup=1" + (($virtual | ForEach-Object { "&virtualEditions[]=$_" }) -join '')
+    $body = "autodl=$(if ($virtual) { 3 } else { 2 })&updates=1&cleanup=0" + (($virtual | ForEach-Object { "&virtualEditions[]=$_" }) -join '')
     New-Item -ItemType Directory -Force $Dest | Out-Null
     $zip = "$Dest\uup.zip"
     Invoke-WebRequest -UseBasicParsing -Method Post -Body $body -ContentType 'application/x-www-form-urlencoded' -OutFile $zip `

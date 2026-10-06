@@ -114,6 +114,10 @@ function Invoke-Build($Cfg, $Sync) {
         if ($missing) {
             Write-Log "Downloading via UUP dump: $($missing -join ', ') (this takes a while)"
             $uupIso = Save-UupIso $uup.uuid $Cfg.BaseLang $missing "$w\uup"
+            # Keep it with your ISOs so the next build reuses it instead of downloading again.
+            New-Item -ItemType Directory -Force $Cfg.IsoFolder | Out-Null
+            $uupIso = (Move-Item $uupIso $Cfg.IsoFolder -Force -PassThru).FullName
+            Write-Log "Saved $(Split-Path $uupIso -Leaf) to $($Cfg.IsoFolder) for next builds"
             if (-not $base) { $base = Get-IsoInfo $uupIso }
             $sources += $missing | ForEach-Object { @{ Iso = $uupIso; Name = $_ } }
         }
@@ -149,14 +153,13 @@ function Invoke-Build($Cfg, $Sync) {
             foreach ($lp in $lps) {
                 Write-Log " add LP $($lp.Lp)"
                 Add-WindowsPackage -Path "$w\mount" -PackagePath $lp.Lp | Out-Null
-                foreach ($fod in $lp.Fods) {
-                    try { Add-WindowsPackage -Path "$w\mount" -PackagePath $fod | Out-Null }
-                    catch { Write-Log " WARN feature $(Split-Path $fod -Leaf): $_" }
+                foreach ($cap in $lp.Capabilities) {
+                    try { Add-WindowsCapability -Path "$w\mount" -Name $cap -Source $lp.FodDir -LimitAccess | Out-Null; Write-Log "  + $cap" }
+                    catch { Write-Log "  WARN $cap not added (Windows installs it online later): $($_.Exception.Message.Split("`n")[0])" }
                 }
             }
             Invoke-Patches "$w\mount" $Cfg.Patches $Cfg
-            Write-Log ' component cleanup'
-            Repair-WindowsImage -Path "$w\mount" -StartComponentCleanup | Out-Null
+            # ponytail: no StartComponentCleanup here (slow, small gain); the max-compression export in step 7 shrinks the image.
             Dismount-WindowsImage -Path "$w\mount" -Save | Out-Null
         }
 

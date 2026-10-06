@@ -150,12 +150,14 @@ function Set-OfflineReg([string[]]$Entries) {
 }
 
 # Order inside an edition: app removal -> registry -> files/drivers (LPs are added before this by Build).
+# Registry entries of the selected patches. Patches without Reg must not add empty entries.
+function Get-PatchReg([string[]]$Ids) { @($Ids | ForEach-Object { $Patches[$_].Reg } | Where-Object { $_ }) }
+
 function Invoke-Patches($Mount, [string[]]$Ids, $Cfg) {
-    $sel = $Ids | ForEach-Object { $Patches[$_] }
     if ($Ids -contains 'bloatapps') { Write-Log ' patch bloatapps'; & $Patches.bloatapps.Action $Mount $Cfg }
     if ($Ids -contains 'xboxapp') { Write-Log ' patch xboxapp'; & $Patches.xboxapp.Action $Mount $Cfg }
     Mount-Hives $Mount
-    try { Set-OfflineReg ($sel | ForEach-Object { $_.Reg }) } finally { Dismount-Hives }
+    try { Set-OfflineReg (Get-PatchReg $Ids) } finally { Dismount-Hives }
     foreach ($id in $Ids | Where-Object { $_ -notin 'bloatapps', 'xboxapp' -and $Patches[$_].Action }) {
         Write-Log " patch $id"; & $Patches[$id].Action $Mount $Cfg
     }
