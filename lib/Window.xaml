@@ -211,7 +211,6 @@
           <TextBlock Text="PRESET" Style="{StaticResource Section}"/>
           <ComboBox x:Name="Preset"/>
           <TextBlock x:Name="Summary" Style="{StaticResource Hint}" Margin="0,12,0,0"/>
-          <Button x:Name="ResetSettings" Content="Reset to defaults" HorizontalAlignment="Left" Margin="0,12,0,0" Padding="10,5" FontSize="11" ToolTip="Forget your saved choices and start fresh"/>
         </StackPanel>
         <ListBox x:Name="Nav" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource Nav}">
           <ListBoxItem Content="Source" Tag="PageSource" IsSelected="True"/>
@@ -245,8 +244,7 @@
           <CheckBox x:Name="UseUup" Style="{StaticResource Toggle}" Content="Download missing editions via UUP dump" IsChecked="True"/>
           <CheckBox x:Name="Newest" Style="{StaticResource Toggle}" Content="Always use the newest Windows (download it if your ISO is an older version)" IsChecked="True"/>
           <CheckBox x:Name="Fast" Style="{StaticResource Toggle}" Content="Fast mode: ~15 min instead of ~60 (older base build; Windows Update updates it after setup)" IsChecked="True"/>
-          <TextBlock x:Name="NewestText" Style="{StaticResource Hint}" Margin="0,0,0,12" Text="Newest available: unknown (offline)"/>
-          <StackPanel Style="{StaticResource Row}"><TextBlock Text="Build" Style="{StaticResource Label}"/><ComboBox x:Name="Build" Width="380"/></StackPanel>
+          <StackPanel Style="{StaticResource Row}" Margin="0,8,0,10"><TextBlock Text="Build" Style="{StaticResource Label}"/><ComboBox x:Name="Build" Width="380"/></StackPanel>
           <TextBlock x:Name="BuildHint" Style="{StaticResource Hint}" Text="Auto picks the newest build matching your ISO."/>
         </StackPanel></Border>
         <Border Style="{StaticResource Card}"><StackPanel>

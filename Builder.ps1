@@ -57,8 +57,6 @@ $buildList = @($script:UupBuilds | Where-Object title -like 'Windows 11, version
 $ui.Build.Items.Add('Auto - newest build matching your ISO') | Out-Null
 foreach ($b in $buildList) { $ui.Build.Items.Add($b.title) | Out-Null }
 $ui.Build.SelectedIndex = 0
-$newestBuild = Select-NewestUupBuild $script:UupBuilds
-if ($newestBuild) { $ui.NewestText.Text = "Newest available: $($newestBuild.title)" }
 
 # --- Source / languages ---
 $ui.IsoFolder.Text = "$root\sources"
@@ -70,8 +68,8 @@ $ui.BaseLang.SelectedItem = $defLang; $ui.Keyboard.SelectedItem = $defLang; $ui.
 # --- Editions ---
 $script:edChecks = [ordered]@{}
 function Update-Editions {
-    # None on first start; afterwards the editions remembered in settings.json until the first scan has run.
-    $checked = @($script:edChecks.Keys | Where-Object { $script:edChecks[$_].IsChecked }) + @($script:pendingEditions)
+    # Keep ticks across rescans / language changes; none on start.
+    $checked = @($script:edChecks.Keys | Where-Object { $script:edChecks[$_].IsChecked })
     $iso = $script:IsoInfos | Where-Object Lang -eq $ui.BaseLang.SelectedItem | Select-Object -First 1
     $names = @($iso.Editions.Name | Where-Object { $_ })
     $all = @($names)
@@ -181,9 +179,8 @@ function Invoke-Scan {
     $ui.ScanResult.Text = if ($script:IsoInfos) {
         ($script:IsoInfos | ForEach-Object { "$($_.Lang)  -  build $($_.Build)  -  $($_.Editions.Count) editions  -  $(Split-Path $_.Path -Leaf)" }) -join "`n"
     } else { 'No ISOs found in this folder.' }
-    if (-not $script:settingsLoaded -and $script:IsoInfos -and $script:IsoInfos[0].Lang -in $langs) { $ui.BaseLang.SelectedItem = $script:IsoInfos[0].Lang }
+    if ($script:IsoInfos -and $script:IsoInfos[0].Lang -in $langs) { $ui.BaseLang.SelectedItem = $script:IsoInfos[0].Lang }
     Update-Editions; Update-Storage
-    $script:pendingEditions = @()
 }
 $ui.ScanIsos.Add_Click({ Invoke-Scan })
 $ui.BaseLang.Add_SelectionChanged({ Update-Editions })
@@ -377,7 +374,6 @@ $ui.BuildBtn.Add_Click({
         $cfg = Get-Config
         $err, $field = Test-Config $cfg
         if ($err) { Show-Field $field; Show-Msg $err 'Warning' | Out-Null; return }
-        Save-Settings
         if ($cfg.Unattend.Enabled -and $cfg.Unattend.AutoInstall -ne 'Off') {
             $what = if ($cfg.Unattend.AutoInstall -eq 'Disk0') { 'DISK 0 of any PC booted from this ISO will be ERASED without asking.' }
                     else { 'Any PC booted from this ISO with one clear best disk will have that disk ERASED after a 10 second countdown.' }
@@ -400,54 +396,9 @@ $ui.BuildBtn.Add_Click({
 $win.Add_Closing({
         param($s, $e)
         if ($script:job) { $e.Cancel = $true; Show-Msg 'A build is running. Cancel it first.' | Out-Null; return }
-        if (-not $script:resetting) { Save-Settings }
-    })
-
-# --- Remember settings (settings.json next to the app; install.ps1 keeps it on update) ---
-# Every named checkbox, text box and dropdown plus patches and editions. Never the password or product key.
-$settingsFile = "$root\settings.json"
-$script:pendingEditions = @(); $script:settingsLoaded = $false
-function Get-ItemKey($i) { if ($i -is [Windows.Controls.ComboBoxItem]) { "$($i.Tag)" } else { "$i" } }
-function Save-Settings {
-    $s = @{ Patches = @($patchChecks.Keys | Where-Object { $patchChecks[$_].IsChecked }); Editions = (Get-Config).Editions; Controls = @{} }
-    foreach ($n in $ui.Keys) {
-        $c = $ui[$n]
-        if ($n -eq 'ProductKey') { continue }
-        if ($c -is [Windows.Controls.CheckBox]) { $s.Controls[$n] = [bool]$c.IsChecked }
-        elseif ($c -is [Windows.Controls.TextBox] -and -not $c.IsReadOnly) { $s.Controls[$n] = $c.Text }
-        elseif ($c -is [Windows.Controls.ComboBox] -and $null -ne $c.SelectedItem) { $s.Controls[$n] = Get-ItemKey $c.SelectedItem }
-    }
-    try { $s | ConvertTo-Json -Depth 4 | Set-Content $settingsFile } catch { }
-}
-function Import-Settings {
-    if (-not (Test-Path $settingsFile)) { return }
-    try { $s = Get-Content $settingsFile -Raw | ConvertFrom-Json } catch { return }
-    $script:settingsLoaded = $true
-    $ctl = $s.Controls.PSObject.Properties
-    $p = $ctl | Where-Object Name -eq 'Preset'
-    if ($p) { $ui.Preset.SelectedItem = $p.Value }   # first: applying a preset sets patches and some toggles
-    $script:applying = $true
-    foreach ($p in $ctl | Where-Object { $_.Name -ne 'Preset' -and $ui[$_.Name] }) {
-        $c = $ui[$p.Name]
-        if ($c -is [Windows.Controls.CheckBox]) { $c.IsChecked = [bool]$p.Value }
-        elseif ($c -is [Windows.Controls.TextBox]) { $c.Text = $p.Value }
-        elseif ($c -is [Windows.Controls.ComboBox]) { $i = @($c.Items | Where-Object { (Get-ItemKey $_) -eq $p.Value })[0]; if ($null -ne $i) { $c.SelectedItem = $i } }
-    }
-    foreach ($id in $patchChecks.Keys) { $patchChecks[$id].IsChecked = $id -in @($s.Patches) }
-    $script:applying = $false
-    $script:pendingEditions = @($s.Editions)
-    Set-UnattendBody
-}
-$ui.ResetSettings.Add_Click({
-        if ((Show-Msg 'Forget all saved settings and restart the builder with the defaults?' 'Question' 'YesNo') -ne 'Yes') { return }
-        Remove-Item $settingsFile -ErrorAction SilentlyContinue
-        $script:resetting = $true
-        Start-Process conhost.exe -ArgumentList "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File `"$root\Builder.ps1`""
-        $win.Close()
     })
 
 $ui.Preset.SelectedItem = 'Recommended'
-Import-Settings
 Update-Editions
 $win.Add_ContentRendered({ Invoke-Scan })
 $win.ShowDialog() | Out-Null
