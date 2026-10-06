@@ -270,6 +270,22 @@
         <TextBlock Text="Generates autounattend.xml so setup answers its own questions." Style="{StaticResource Sub}"/>
         <CheckBox x:Name="UnattendOn" Style="{StaticResource Toggle}" Content="Enable autounattend.xml" Margin="0,0,0,16"/>
         <StackPanel x:Name="UnattendBody">
+          <Border Style="{StaticResource Card}"><StackPanel>
+            <TextBlock Text="ACCOUNT" Style="{StaticResource Section}"/>
+            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Username" Style="{StaticResource Label}"/><TextBox x:Name="UserName" Width="220" Text="User"/></StackPanel>
+            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Password" Style="{StaticResource Label}"/><PasswordBox x:Name="Password" Width="220"/>
+              <TextBlock Text="empty = no password" Style="{StaticResource Hint}" Margin="12,0,0,0" VerticalAlignment="Center"/></StackPanel>
+            <StackPanel x:Name="AdvAccount" Visibility="Collapsed">
+            <CheckBox x:Name="AutoLogon" Style="{StaticResource Toggle}" Content="Auto-login on first boot"/>
+            <CheckBox x:Name="AdminGroup" Style="{StaticResource Toggle}" Content="Make user administrator" IsChecked="True"/>
+            </StackPanel>
+            <TextBlock Style="{StaticResource Hint}" Text="The password is stored base64-encoded inside the ISO. That is not encryption."/>
+          </StackPanel></Border>
+          <Border Style="{StaticResource Card}"><StackPanel>
+            <TextBlock Text="SETUP SCREENS" Style="{StaticResource Section}"/>
+            <CheckBox x:Name="SkipOobe" Style="{StaticResource Toggle}" Content="Skip all OOBE screens (EULA, privacy, Microsoft account, network)" IsChecked="True" Margin="0"/>
+          </StackPanel></Border>
+          <StackPanel x:Name="AdvUnattend" Visibility="Collapsed">
           <Border Style="{StaticResource Card}" BorderBrush="#5A2A2A"><StackPanel>
             <TextBlock Text="INSTALL" Style="{StaticResource Section}"/>
             <StackPanel Style="{StaticResource Row}"><CheckBox x:Name="SkipEdition" Style="{StaticResource Toggle}" Content="Skip edition choice" Width="200" Margin="0"/><ComboBox x:Name="Edition" Width="260"/></StackPanel>
@@ -284,15 +300,6 @@
             <TextBlock Style="{StaticResource Hint}" Foreground="{StaticResource Danger}" Text="Best SSD prefers NVMe, then SSD, then HDD, never USB or disks under 64 GB, and gives you 10 seconds to cancel with Ctrl+C. If two disks tie, normal setup opens instead. Needs 'Skip edition choice'. Any PC booted from this ISO can be wiped."/>
           </StackPanel></Border>
           <Border Style="{StaticResource Card}"><StackPanel>
-            <TextBlock Text="ACCOUNT" Style="{StaticResource Section}"/>
-            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Username" Style="{StaticResource Label}"/><TextBox x:Name="UserName" Width="220" Text="User"/></StackPanel>
-            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Password" Style="{StaticResource Label}"/><PasswordBox x:Name="Password" Width="220"/>
-              <TextBlock Text="empty = no password" Style="{StaticResource Hint}" Margin="12,0,0,0" VerticalAlignment="Center"/></StackPanel>
-            <CheckBox x:Name="AutoLogon" Style="{StaticResource Toggle}" Content="Auto-login on first boot"/>
-            <CheckBox x:Name="AdminGroup" Style="{StaticResource Toggle}" Content="Make user administrator" IsChecked="True"/>
-            <TextBlock Style="{StaticResource Hint}" Text="The password is stored base64-encoded inside the ISO. That is not encryption."/>
-          </StackPanel></Border>
-          <Border Style="{StaticResource Card}"><StackPanel>
             <TextBlock Text="REGION" Style="{StaticResource Section}"/>
             <StackPanel Style="{StaticResource Row}"><TextBlock Text="Computer name" Style="{StaticResource Label}"/><TextBox x:Name="ComputerName" Width="220"/>
               <TextBlock Text="empty = random" Style="{StaticResource Hint}" Margin="12,0,0,0" VerticalAlignment="Center"/></StackPanel>
@@ -301,15 +308,12 @@
             <StackPanel Style="{StaticResource Row}" Margin="0"><TextBlock Text="Locale / format" Style="{StaticResource Label}"/><ComboBox x:Name="Locale" Width="160"/></StackPanel>
           </StackPanel></Border>
           <Border Style="{StaticResource Card}"><StackPanel>
-            <TextBlock Text="SETUP SCREENS" Style="{StaticResource Section}"/>
-            <CheckBox x:Name="SkipOobe" Style="{StaticResource Toggle}" Content="Skip all OOBE screens (EULA, privacy, Microsoft account, network)" IsChecked="True" Margin="0"/>
-          </StackPanel></Border>
-          <Border Style="{StaticResource Card}"><StackPanel>
             <TextBlock Text="AFTER INSTALL" Style="{StaticResource Section}"/>
             <CheckBox x:Name="RunWinUtil" Style="{StaticResource Toggle}" Content="Run CTT WinUtil after first login"/>
             <CheckBox x:Name="EnableAdmin" Style="{StaticResource Toggle}" Content="Activate the hidden Administrator account"/>
             <DockPanel><TextBlock Text="My script" Style="{StaticResource Label}"/><Button x:Name="BrowseScript" DockPanel.Dock="Right" Content="Browse"/><TextBox x:Name="CustomScript"/></DockPanel>
           </StackPanel></Border>
+          </StackPanel>
         </StackPanel>
       </StackPanel></ScrollViewer>
 

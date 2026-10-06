@@ -119,10 +119,11 @@ foreach ($g in $Patches.Values.Group | Select-Object -Unique) {   # catalog orde
 $ui.BrowseDrivers.Add_Click({ Select-Folder $ui.DriversPath })
 
 # --- Advanced options: hidden by default; the defaults behind them stay in effect ---
-$ui.ShowAdvanced.Add_Click({
-        $v = if ($ui.ShowAdvanced.IsChecked) { 'Visible' } else { 'Collapsed' }
-        $ui.AdvSource.Visibility = $v; $ui.AdvBuild.Visibility = $v
-    })
+function Set-Advanced {
+    $v = if ($ui.ShowAdvanced.IsChecked) { 'Visible' } else { 'Collapsed' }
+    foreach ($n in 'AdvSource', 'AdvBuild', 'AdvAccount', 'AdvUnattend') { $ui[$n].Visibility = $v }
+}
+$ui.ShowAdvanced.Add_Click({ Set-Advanced })
 
 # --- Unattended ---
 foreach ($tz in [TimeZoneInfo]::GetSystemTimeZones()) { $ui.TimeZone.Items.Add($tz.Id) | Out-Null }
@@ -200,19 +201,36 @@ function Get-Config {
     }
 }
 
+# Returns the problem and the control to fix it in (Show-Field jumps there), or nothing if the config is fine.
 function Test-Config($c) {
-    if (-not $c.Editions) { return 'Select at least one edition (Source page - scan your ISOs or turn on UUP dump).' }
-    if (-not $c.BaseLang) { return 'Select a base language.' }
-    if ($c.Output -notmatch '\.iso$') { return 'Output must be an .iso file.' }
-    if ('drivers' -in $c.Patches -and -not (Test-Path $c.DriversPath)) { return 'Driver folder does not exist.' }
+    if (-not $c.Editions) { return 'Select at least one edition (scan your ISOs or turn on UUP dump).', 'EditionPanel' }
+    if (-not $c.BaseLang) { return 'Select a base language.', 'BaseLang' }
+    if ($c.Output -notmatch '\.iso$') { return 'Output must be an .iso file.', 'Output' }
+    if ('drivers' -in $c.Patches -and -not (Test-Path $c.DriversPath)) { return 'Driver folder does not exist.', 'DriversPath' }
     $u = $c.Unattend
     if ($u.Enabled) {
-        if (-not $u.UserName.Trim()) { return 'Username is empty.' }
-        if ($u.CustomScript -and -not (Test-Path $u.CustomScript)) { return 'Custom script not found.' }
-        if ($u.ProductKey -and $u.ProductKey -notmatch '^([A-Z0-9]{5}-){4}[A-Z0-9]{5}$') { return 'Product key must look like XXXXX-XXXXX-XXXXX-XXXXX-XXXXX.' }
-        if ($u.Edition -and -not $u.ProductKey -and -not $GenericKeys[$u.Edition]) { return "No generic key for $($u.Edition); turn off 'Skip edition choice' or enter a key." }
-        if ($u.AutoInstall -eq 'BestSsd' -and -not $u.Edition) { return "'Best SSD' needs 'Skip edition choice' with an edition selected." }
-        if ($u.Edition -and $u.Edition -notin $c.Editions) { return "'$($u.Edition)' (Skip edition choice) is not one of the selected editions." }
+        if (-not $u.UserName.Trim()) { return 'Username is empty.', 'UserName' }
+        if ($u.CustomScript -and -not (Test-Path $u.CustomScript)) { return 'Custom script not found.', 'CustomScript' }
+        if ($u.ProductKey -and $u.ProductKey -notmatch '^([A-Z0-9]{5}-){4}[A-Z0-9]{5}$') { return 'Product key must look like XXXXX-XXXXX-XXXXX-XXXXX-XXXXX.', 'ProductKey' }
+        if ($u.Edition -and -not $u.ProductKey -and -not $GenericKeys[$u.Edition]) { return "No generic key for $($u.Edition); turn off 'Skip edition choice' or enter a key.", 'Edition' }
+        if ($u.AutoInstall -eq 'BestSsd' -and -not $u.Edition) { return "'Best SSD' needs 'Skip edition choice' with an edition selected.", 'SkipEdition' }
+        if ($u.Edition -and $u.Edition -notin $c.Editions) { return "'$($u.Edition)' (Skip edition choice) is not one of the selected editions.", 'Edition' }
+    }
+}
+
+# Opens the page (and advanced options) holding control $Name, scrolls to it and outlines its card red for 3 s.
+function Show-Field($Name) {
+    $el = $ui[$Name]; $card = $null
+    for ($p = $el; $p; $p = [Windows.LogicalTreeHelper]::GetParent($p)) {
+        if (-not $card -and $p -is [Windows.Controls.Border] -and $p.Style -eq $win.FindResource('Card')) { $card = $p }
+        if ($p.Name -like 'Adv*') { $ui.ShowAdvanced.IsChecked = $true; Set-Advanced }
+        if ($p.Name -like 'Page*') { $ui.Nav.SelectedItem = @($ui.Nav.Items | Where-Object Tag -eq $p.Name)[0] }
+    }
+    $win.Dispatcher.BeginInvoke([action] { $el.BringIntoView(); $el.Focus() | Out-Null }.GetNewClosure(), 'Loaded') | Out-Null
+    if ($card) {
+        $old = $card.BorderBrush; $card.BorderBrush = $win.FindResource('Danger')
+        $t = New-Object Windows.Threading.DispatcherTimer -Property @{ Interval = [TimeSpan]::FromSeconds(3) }
+        $t.Add_Tick({ $t.Stop(); $card.BorderBrush = $old }.GetNewClosure()); $t.Start()
     }
 }
 
@@ -348,8 +366,8 @@ $ui.BuildBtn.Add_Click({
             $ui.Log.AppendText("Cancelling after the current operation...`r`n"); return
         }
         $cfg = Get-Config
-        $err = Test-Config $cfg
-        if ($err) { Show-Msg $err 'Warning' | Out-Null; return }
+        $err, $field = Test-Config $cfg
+        if ($err) { Show-Field $field; Show-Msg $err 'Warning' | Out-Null; return }
         if ($cfg.Unattend.Enabled -and $cfg.Unattend.AutoInstall -ne 'Off') {
             $what = if ($cfg.Unattend.AutoInstall -eq 'Disk0') { 'DISK 0 of any PC booted from this ISO will be ERASED without asking.' }
                     else { 'Any PC booted from this ISO with one clear best disk will have that disk ERASED after a 10 second countdown.' }
