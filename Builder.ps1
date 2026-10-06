@@ -86,8 +86,13 @@ $ui.UpdateBtn.Add_Click({
 $ui.IsoFolder.Text = "$root\sources"
 $ui.BrowseIso.Add_Click({ Select-Folder $ui.IsoFolder })
 foreach ($l in $langs) { $ui.BaseLang.Items.Add($l) | Out-Null; $ui.Keyboard.Items.Add($l) | Out-Null; $ui.Locale.Items.Add($l) | Out-Null }
-$defLang = if ($langs -contains 'de-de') { 'de-de' } else { $langs[0] }
-$ui.BaseLang.SelectedItem = $defLang; $ui.Keyboard.SelectedItem = $defLang; $ui.Locale.SelectedItem = $defLang
+# Defaults follow this PC: Windows display language, then region/keyboard; en-us when not in the list.
+function Get-DefaultLang($Tag) {
+    $t = "$Tag".ToLower()
+    @($t; $langs -like "$($t.Split('-')[0])-*"; 'en-us'; $langs[0]) | Where-Object { $_ -in $langs } | Select-Object -First 1
+}
+$ui.BaseLang.SelectedItem = Get-DefaultLang (Get-UICulture).Name
+$region = Get-DefaultLang (Get-Culture).Name; $ui.Keyboard.SelectedItem = $region; $ui.Locale.SelectedItem = $region
 
 # --- Editions ---
 $script:edChecks = [ordered]@{}
@@ -156,7 +161,7 @@ $ui.BrowseDrivers.Add_Click({ Select-Folder $ui.DriversPath })
 
 # --- Unattended ---
 foreach ($tz in [TimeZoneInfo]::GetSystemTimeZones()) { $ui.TimeZone.Items.Add($tz.Id) | Out-Null }
-$ui.TimeZone.SelectedItem = 'W. Europe Standard Time'
+$ui.TimeZone.SelectedItem = (Get-TimeZone).Id
 function Set-UnattendBody { $on = [bool]$ui.UnattendOn.IsChecked; $ui.UnattendBody.IsEnabled = $on; $ui.UnattendBody.Opacity = if ($on) { 1 } else { 0.4 } }
 Set-UnattendBody
 $ui.UnattendOn.Add_Checked({ Set-UnattendBody }); $ui.UnattendOn.Add_Unchecked({ Set-UnattendBody })
