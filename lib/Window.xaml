@@ -201,7 +201,6 @@
           </StackPanel>
         </StackPanel>
         <StackPanel DockPanel.Dock="Bottom" Margin="24,0,20,24">
-          <CheckBox x:Name="ShowAdvanced" Style="{StaticResource Toggle}" Content="Advanced options" Margin="0,0,0,18" ToolTip="Show build selector, fast mode and output tuning"/>
           <TextBlock Text="PRESET" Style="{StaticResource Section}"/>
           <ComboBox x:Name="Preset"/>
           <TextBlock x:Name="Summary" Style="{StaticResource Hint}" Margin="0,12,0,0"/>
@@ -236,14 +235,12 @@
         </StackPanel></Border>
         <Border Style="{StaticResource Card}"><StackPanel>
           <TextBlock Text="UUP DUMP" Style="{StaticResource Section}"/>
-          <CheckBox x:Name="UseUup" Style="{StaticResource Toggle}" Content="Download missing editions via UUP dump" IsChecked="True" Margin="0"/>
-          <StackPanel x:Name="AdvSource" Visibility="Collapsed" Margin="0,12,0,0">
+          <CheckBox x:Name="UseUup" Style="{StaticResource Toggle}" Content="Download missing editions via UUP dump" IsChecked="True"/>
           <CheckBox x:Name="Newest" Style="{StaticResource Toggle}" Content="Always use the newest Windows (download it if your ISO is an older version)" IsChecked="True"/>
           <CheckBox x:Name="Fast" Style="{StaticResource Toggle}" Content="Fast mode: ~15 min instead of ~60 (older base build; Windows Update updates it after setup)" IsChecked="True"/>
           <TextBlock x:Name="NewestText" Style="{StaticResource Hint}" Margin="0,0,0,12" Text="Newest available: unknown (offline)"/>
           <StackPanel Style="{StaticResource Row}"><TextBlock Text="Build" Style="{StaticResource Label}"/><ComboBox x:Name="Build" Width="380"/></StackPanel>
           <TextBlock Style="{StaticResource Hint}" Text="Auto picks the newest build matching your ISO."/>
-          </StackPanel>
         </StackPanel></Border>
         <Border Style="{StaticResource Card}"><StackPanel>
           <TextBlock Text="EDITIONS" Style="{StaticResource Section}"/>
@@ -271,22 +268,6 @@
         <TextBlock Text="Generates autounattend.xml so setup answers its own questions." Style="{StaticResource Sub}"/>
         <CheckBox x:Name="UnattendOn" Style="{StaticResource Toggle}" Content="Enable autounattend.xml" Margin="0,0,0,16"/>
         <StackPanel x:Name="UnattendBody">
-          <Border Style="{StaticResource Card}"><StackPanel>
-            <TextBlock Text="ACCOUNT" Style="{StaticResource Section}"/>
-            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Username" Style="{StaticResource Label}"/><TextBox x:Name="UserName" Width="220" Text="User"/></StackPanel>
-            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Password" Style="{StaticResource Label}"/><PasswordBox x:Name="Password" Width="220"/>
-              <TextBlock Text="empty = no password" Style="{StaticResource Hint}" Margin="12,0,0,0" VerticalAlignment="Center"/></StackPanel>
-            <StackPanel x:Name="AdvAccount" Visibility="Collapsed">
-            <CheckBox x:Name="AutoLogon" Style="{StaticResource Toggle}" Content="Auto-login on first boot"/>
-            <CheckBox x:Name="AdminGroup" Style="{StaticResource Toggle}" Content="Make user administrator" IsChecked="True"/>
-            </StackPanel>
-            <TextBlock Style="{StaticResource Hint}" Text="The password is stored base64-encoded inside the ISO. That is not encryption."/>
-          </StackPanel></Border>
-          <Border Style="{StaticResource Card}"><StackPanel>
-            <TextBlock Text="SETUP SCREENS" Style="{StaticResource Section}"/>
-            <CheckBox x:Name="SkipOobe" Style="{StaticResource Toggle}" Content="Skip all OOBE screens (EULA, privacy, Microsoft account, network)" IsChecked="True" Margin="0"/>
-          </StackPanel></Border>
-          <StackPanel x:Name="AdvUnattend" Visibility="Collapsed">
           <Border Style="{StaticResource Card}" BorderBrush="#5A2A2A"><StackPanel>
             <TextBlock Text="INSTALL" Style="{StaticResource Section}"/>
             <StackPanel Style="{StaticResource Row}"><CheckBox x:Name="SkipEdition" Style="{StaticResource Toggle}" Content="Skip edition choice" Width="200" Margin="0"/><ComboBox x:Name="Edition" Width="260"/></StackPanel>
@@ -299,6 +280,19 @@
                 <ComboBoxItem Content="Disk 0 - always wipe disk 0" Tag="Disk0"/>
               </ComboBox></StackPanel>
             <TextBlock Style="{StaticResource Hint}" Foreground="{StaticResource Danger}" Text="Best SSD prefers NVMe, then SSD, then HDD, never USB or disks under 64 GB, and gives you 10 seconds to cancel with Ctrl+C. If two disks tie, normal setup opens instead. Needs 'Skip edition choice'. Any PC booted from this ISO can be wiped."/>
+          </StackPanel></Border>
+          <Border Style="{StaticResource Card}"><StackPanel>
+            <TextBlock Text="ACCOUNT" Style="{StaticResource Section}"/>
+            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Username" Style="{StaticResource Label}"/><TextBox x:Name="UserName" Width="220" Text="User"/></StackPanel>
+            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Password" Style="{StaticResource Label}"/><PasswordBox x:Name="Password" Width="220"/>
+              <TextBlock Text="empty = no password" Style="{StaticResource Hint}" Margin="12,0,0,0" VerticalAlignment="Center"/></StackPanel>
+            <CheckBox x:Name="AutoLogon" Style="{StaticResource Toggle}" Content="Auto-login on first boot"/>
+            <CheckBox x:Name="AdminGroup" Style="{StaticResource Toggle}" Content="Make user administrator" IsChecked="True"/>
+            <TextBlock Style="{StaticResource Hint}" Text="The password is stored base64-encoded inside the ISO. That is not encryption."/>
+          </StackPanel></Border>
+          <Border Style="{StaticResource Card}"><StackPanel>
+            <TextBlock Text="SETUP SCREENS" Style="{StaticResource Section}"/>
+            <CheckBox x:Name="SkipOobe" Style="{StaticResource Toggle}" Content="Skip all OOBE screens (EULA, privacy, Microsoft account, network)" IsChecked="True" Margin="0"/>
           </StackPanel></Border>
           <Border Style="{StaticResource Card}"><StackPanel>
             <TextBlock Text="REGION" Style="{StaticResource Section}"/>
@@ -314,7 +308,6 @@
             <CheckBox x:Name="EnableAdmin" Style="{StaticResource Toggle}" Content="Activate the hidden Administrator account"/>
             <DockPanel><TextBlock Text="My script" Style="{StaticResource Label}"/><Button x:Name="BrowseScript" DockPanel.Dock="Right" Content="Browse"/><TextBox x:Name="CustomScript"/></DockPanel>
           </StackPanel></Border>
-          </StackPanel>
         </StackPanel>
       </StackPanel></ScrollViewer>
 
@@ -331,12 +324,10 @@
           </StackPanel></Border>
           <Border Grid.Column="1" Style="{StaticResource Card}"><StackPanel>
             <TextBlock Text="OUTPUT" Style="{StaticResource Section}"/>
-            <DockPanel><Button x:Name="BrowseOut" DockPanel.Dock="Right" Content="Browse"/><TextBox x:Name="Output"/></DockPanel>
-            <StackPanel x:Name="AdvBuild" Visibility="Collapsed" Margin="0,12,0,0">
+            <DockPanel Margin="0,0,0,12"><Button x:Name="BrowseOut" DockPanel.Dock="Right" Content="Browse"/><TextBox x:Name="Output"/></DockPanel>
             <CheckBox x:Name="Split" Style="{StaticResource Toggle}" Content="Split install.wim for FAT32 USB"/>
             <CheckBox x:Name="QuickCompress" Style="{StaticResource Toggle}" Content="Quick compression" ToolTip="A few minutes faster per edition; the ISO is about 1 GB bigger."/>
             <CheckBox x:Name="DefenderExclude" Style="{StaticResource Toggle}" Content="Skip Defender scan of work folder" Margin="0" ToolTip="Faster mount/save. Only the work folder is excluded, and only until the build ends."/>
-            </StackPanel>
           </StackPanel></Border>
         </Grid>
         <DockPanel Grid.Row="2" Margin="0,4,0,14">

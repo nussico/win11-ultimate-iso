@@ -119,13 +119,6 @@ foreach ($g in $Patches.Values.Group | Select-Object -Unique) {   # catalog orde
 }
 $ui.BrowseDrivers.Add_Click({ Select-Folder $ui.DriversPath })
 
-# --- Advanced options: hidden by default; the defaults behind them stay in effect ---
-function Set-Advanced {
-    $v = if ($ui.ShowAdvanced.IsChecked) { 'Visible' } else { 'Collapsed' }
-    foreach ($n in 'AdvSource', 'AdvBuild', 'AdvAccount', 'AdvUnattend') { $ui[$n].Visibility = $v }
-}
-$ui.ShowAdvanced.Add_Click({ Set-Advanced })
-
 # --- Unattended ---
 foreach ($tz in [TimeZoneInfo]::GetSystemTimeZones()) { $ui.TimeZone.Items.Add($tz.Id) | Out-Null }
 $ui.TimeZone.SelectedItem = 'W. Europe Standard Time'
@@ -220,12 +213,11 @@ function Test-Config($c) {
     }
 }
 
-# Opens the page (and advanced options) holding control $Name, scrolls to it and outlines its card red for 3 s.
+# Opens the page holding control $Name, scrolls to it and outlines its card red for 3 s.
 function Show-Field($Name) {
     $el = $ui[$Name]; $card = $null
     for ($p = $el; $p; $p = [Windows.LogicalTreeHelper]::GetParent($p)) {
         if (-not $card -and $p -is [Windows.Controls.Border] -and $p.Style -eq $win.FindResource('Card')) { $card = $p }
-        if ($p.Name -like 'Adv*') { $ui.ShowAdvanced.IsChecked = $true; Set-Advanced }
         if ($p.Name -like 'Page*') { $ui.Nav.SelectedItem = @($ui.Nav.Items | Where-Object Tag -eq $p.Name)[0] }
     }
     $win.Dispatcher.BeginInvoke([action] { $el.BringIntoView(); $el.Focus() | Out-Null }.GetNewClosure(), 'Loaded') | Out-Null
@@ -429,7 +421,7 @@ function Import-Settings {
     foreach ($id in $patchChecks.Keys) { $patchChecks[$id].IsChecked = $id -in @($s.Patches) }
     $script:applying = $false
     $script:pendingEditions = @($s.Editions)
-    Set-Advanced; Set-UnattendBody
+    Set-UnattendBody
 }
 $ui.ResetSettings.Add_Click({
         if ((Show-Msg 'Forget all saved settings and restart the builder with the defaults?' 'Question' 'YesNo') -ne 'Yes') { return }
