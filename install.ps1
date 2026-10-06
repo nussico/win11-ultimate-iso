@@ -15,10 +15,11 @@
     Invoke-WebRequest "https://github.com/$repo/archive/refs/heads/main.zip" -OutFile $zip -UseBasicParsing
     if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
     Expand-Archive $zip $tmp
+    # Unblock before copying: work\ in $dir can hold TrustedInstaller-owned leftovers that can't even be listed.
+    Get-ChildItem $tmp -Recurse -File | Unblock-File
     New-Item -ItemType Directory -Force $dir | Out-Null
     # Overwrites program files only; your sources\, out\ and cache\ stay.
     Copy-Item "$((Get-ChildItem $tmp)[0].FullName)\*" $dir -Recurse -Force
-    Get-ChildItem $dir -Recurse -File | Unblock-File
     Remove-Item $zip, $tmp -Recurse -Force
 
     # conhost --headless: the builder opens without an extra console window
