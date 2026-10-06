@@ -165,6 +165,31 @@ $ui.TimeZone.SelectedItem = (Get-TimeZone).Id
 function Set-UnattendBody { $on = [bool]$ui.UnattendOn.IsChecked; $ui.UnattendBody.IsEnabled = $on; $ui.UnattendBody.Opacity = if ($on) { 1 } else { 0.4 } }
 Set-UnattendBody
 $ui.UnattendOn.Add_Checked({ Set-UnattendBody }); $ui.UnattendOn.Add_Unchecked({ Set-UnattendBody })
+
+# Apps: search winget on this PC, click a result to add it; click an added app (unchecks) to remove it.
+function Add-App($Name, $Id) {
+    if ($Id -in @($ui.AppPanel.Children | ForEach-Object Tag)) { return }
+    $c = New-Check "$Name  ($Id)" 'Chip' $true; $c.Tag = $Id
+    $c.Add_Unchecked({ $ui.AppPanel.Children.Remove($this) })
+    $ui.AppPanel.Children.Add($c) | Out-Null
+}
+function Search-Apps {
+    $q = $ui.AppSearch.Text.Trim(); if (-not $q) { return }
+    $ui.AppResults.Children.Clear()
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { $ui.AppsHint.Text = 'winget is not installed on this PC, so search does not work here.'; return }
+    $win.Cursor = 'Wait'; $win.Dispatcher.Invoke([action] {}, 'Render')
+    $enc = [Console]::OutputEncoding; [Console]::OutputEncoding = [Text.Encoding]::UTF8
+    try { $found = @(ConvertFrom-WingetSearch @(winget search $q --source winget --count 15 --accept-source-agreements --disable-interactivity 2>$null)) }
+    finally { [Console]::OutputEncoding = $enc; $win.Cursor = $null }
+    if (-not $found) { $ui.AppResults.Children.Add((New-Object Windows.Controls.TextBlock -Property @{ Text = "Nothing found for '$q'." })) | Out-Null }
+    foreach ($f in $found) {
+        $c = New-Check "+ $($f.Name)  ($($f.Id))" 'Chip'; $c.Tag = $f
+        $c.Add_Checked({ Add-App $this.Tag.Name $this.Tag.Id; $ui.AppResults.Children.Remove($this) })
+        $ui.AppResults.Children.Add($c) | Out-Null
+    }
+}
+$ui.SearchApps.Add_Click({ Search-Apps })
+$ui.AppSearch.Add_KeyDown({ if ($_.Key -eq 'Return') { Search-Apps } })
 $ui.UnattendOn.Add_Click({ Update-Summary })
 $ui.BrowseScript.Add_Click({
         $d = New-Object Windows.Forms.OpenFileDialog -Property @{ Filter = 'PowerShell (*.ps1)|*.ps1' }
@@ -232,6 +257,7 @@ function Get-Config {
             SkipOobe = [bool]$ui.SkipOobe.IsChecked; Edition = $(if ($ui.SkipEdition.IsChecked) { [string]$ui.Edition.SelectedItem } else { '' })
             ProductKey = $ui.ProductKey.Text.Trim().ToUpper(); AutoInstall = [string]$ui.AutoInstall.SelectedItem.Tag
             RunWinUtil = [bool]$ui.RunWinUtil.IsChecked; CustomScript = $ui.CustomScript.Text; EnableAdmin = [bool]$ui.EnableAdmin.IsChecked
+            Apps = @($ui.AppPanel.Children | ForEach-Object Tag)
         }
         Output = $ui.Output.Text; Split = [bool]$ui.Split.IsChecked; QuickCompress = [bool]$ui.QuickCompress.IsChecked; DefenderExclude = [bool]$ui.DefenderExclude.IsChecked; WorkDir = "$root\work"; CacheDir = "$root\cache"; ToolVersion = $toolVersion
     }

@@ -46,6 +46,18 @@ Assert ($s -match 'VK7JG-NPHTM-C97JM-9MPGT-3V66T') 'Edition Pro -> generic Pro k
 Assert ($s -match 'HideOnlineAccountScreens' -and $s -match 'christitus') 'SkipOobe + WinUtil'
 Assert ($s -match '<ComputerName>\*</ComputerName>') 'Empty computer name -> random'
 Assert ($s -match 'International-Core-WinPE' -and $s -match '<SetupUILanguage><UILanguage>de-DE</UILanguage>') 'Setup language page skipped (windowsPE)'
+Assert ($s -notmatch 'apps\.ps1') 'No apps -> no apps script'
+$u.Apps = @('Discord.Discord'); $s = ([xml](New-UnattendXml $u)).OuterXml; $u.Apps = $null
+Assert ($s -match 'apps\.ps1' -and $s.IndexOf('apps.ps1') -lt $s.IndexOf('christitus')) 'Apps installed at first login, before WinUtil'
+$found = @(ConvertFrom-WingetSearch @('   - ', 'Name            Id                            Version          Match                Source',
+    '------------------------------------------------------------------------------------------',
+    'Discord         Discord.Discord               1.0.9261         ProductCode: discord winget',
+    'Discord (arm64) Discord.Discord.arm64         1.0.53           ProductCode: discord winget'))
+Assert ($found.Count -eq 2 -and $found[0].Id -eq 'Discord.Discord' -and $found[1].Name -eq 'Discord (arm64)') 'winget search output -> Name/Id'
+Assert (-not (ConvertFrom-WingetSearch @('No package found matching input criteria.'))) 'winget search: nothing found'
+$as = New-AppsScript @('Valve.Steam', "x'; Remove-Item C:\ -Recurse #")
+$e = $null; [Management.Automation.Language.Parser]::ParseInput($as, [ref]$null, [ref]$e) | Out-Null
+Assert ($as -match "'Valve.Steam'" -and $as -notmatch 'Remove-Item' -and -not $e) 'Apps script: valid PowerShell, bad IDs dropped'
 $u.AutoInstall = 'Disk0'; $u.SkipOobe = $false; $u.Edition = ''; $u.Password = ''
 $s = ([xml](New-UnattendXml $u)).OuterXml
 Assert ($s -match 'WillWipeDisk' -and $s -notmatch 'HideOnlineAccountScreens' -and $s -notmatch 'ProductKey') 'Disk0 wipe, OOBE shown, no key'
@@ -123,8 +135,8 @@ Assert ($q.Body -match 'updates=1' -and $q.Edition -eq 'CORE;PROFESSIONAL' -and 
     . "$root\lib\Build.ps1"
     Assert ((Get-IsoLabel '99cfb89') -eq 'W11U_99CFB89' -and (Get-IsoLabel '') -eq 'W11U_DEV' -and (Get-IsoLabel 'a b-c!') -eq 'W11U_ABC') 'ISO label: W11U_<version>, safe characters only'
     $t = Get-IsoInfoText @{ ToolVersion = '99cfb89'; Editions = @('Windows 11 Pro'); BaseLang = 'de-de'; Patches = @('hwchecks')
-        Unattend = @{ Enabled = $true; AutoInstall = 'BestSsd'; Password = 'secret1'; ProductKey = 'AAAAA-BBBBB-CCCCC-DDDDD-EEEEE' } }
-    Assert ($t -match 'Builder 99cfb89' -and $t -match 'Windows 11 Pro' -and $t -notmatch 'secret1|AAAAA') 'Win11Ultimate.txt: version + choices, no secrets'
+        Unattend = @{ Enabled = $true; AutoInstall = 'BestSsd'; Apps = @('Valve.Steam'); Password = 'secret1'; ProductKey = 'AAAAA-BBBBB-CCCCC-DDDDD-EEEEE' } }
+    Assert ($t -match 'Builder 99cfb89' -and $t -match 'Windows 11 Pro' -and $t -match 'Valve.Steam' -and $t -notmatch 'secret1|AAAAA') 'Win11Ultimate.txt: version + choices, no secrets'
 }
 
 # Background build wiring (same pattern as Builder.ps1). Cancel is preset, so nothing is built.

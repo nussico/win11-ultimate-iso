@@ -309,6 +309,14 @@
             <StackPanel Style="{StaticResource Row}" Margin="0"><TextBlock Text="Locale / format" Style="{StaticResource Label}"/><ComboBox x:Name="Locale" Width="160"/></StackPanel>
           </StackPanel></Border>
           <Border Style="{StaticResource Card}"><StackPanel>
+            <TextBlock Text="APPS" Style="{StaticResource Section}"/>
+            <DockPanel><TextBlock Text="Search winget" Style="{StaticResource Label}"/><Button x:Name="SearchApps" DockPanel.Dock="Right" Content="Search"/><TextBox x:Name="AppSearch"/></DockPanel>
+            <WrapPanel x:Name="AppResults" Margin="0,8,0,0"/>
+            <TextBlock Text="Will be installed" Style="{StaticResource Section}" Margin="0,12,0,6"/>
+            <WrapPanel x:Name="AppPanel"/>
+            <TextBlock x:Name="AppsHint" Style="{StaticResource Hint}" Text="Type a name (e.g. discord) and press Enter, then click a result to add it. Click an added app to remove it. Installed with winget after the first login (needs internet)."/>
+          </StackPanel></Border>
+          <Border Style="{StaticResource Card}"><StackPanel>
             <TextBlock Text="AFTER INSTALL" Style="{StaticResource Section}"/>
             <CheckBox x:Name="RunWinUtil" Style="{StaticResource Toggle}" Content="Run CTT WinUtil after first login"/>
             <CheckBox x:Name="EnableAdmin" Style="{StaticResource Toggle}" Content="Activate the hidden Administrator account"/>

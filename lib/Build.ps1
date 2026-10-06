@@ -79,6 +79,7 @@ function Get-IsoInfoText($Cfg) {
         "Language:   $($Cfg.BaseLang)"
         "Patches:    $(if ($Cfg.Patches) { $Cfg.Patches -join ', ' } else { 'none' })"
         "Unattended: $(if ($Cfg.Unattend.Enabled) { "yes, automatic install $($Cfg.Unattend.AutoInstall)" } else { 'no' })"
+        "Apps:       $(if ($Cfg.Unattend.Enabled -and $Cfg.Unattend.Apps) { $Cfg.Unattend.Apps -join ', ' } else { 'none' })"
     ) -join "`r`n"
 }
 
@@ -210,10 +211,10 @@ function Invoke-Build($Cfg, $Sync) {
 
         Enter-Step 6 'Unattended'
         if ($Cfg.Unattend.Enabled) {
-            if ($Cfg.Unattend.CustomScript) {
-                $dir = New-Item -ItemType Directory -Force "$w\iso\sources\`$OEM`$\`$`$\Setup\Scripts"
-                Copy-Item $Cfg.Unattend.CustomScript "$dir\custom.ps1"
-            }
+            $dir = "$w\iso\sources\`$OEM`$\`$`$\Setup\Scripts"   # copied to C:\Windows\Setup\Scripts
+            if ($Cfg.Unattend.CustomScript -or $Cfg.Unattend.Apps) { New-Item -ItemType Directory -Force $dir | Out-Null }
+            if ($Cfg.Unattend.CustomScript) { Copy-Item $Cfg.Unattend.CustomScript "$dir\custom.ps1" }
+            if ($Cfg.Unattend.Apps) { Set-Content "$dir\apps.ps1" (New-AppsScript $Cfg.Unattend.Apps); Write-Log "Apps: $($Cfg.Unattend.Apps -join ', ')" }
             [IO.File]::WriteAllText("$w\iso\autounattend.xml", (New-UnattendXml $Cfg.Unattend))
             if ($Cfg.Unattend.AutoInstall -eq 'BestSsd') { Copy-Item "$PSScriptRoot\autoinstall.js" "$w\iso\sources\autoinstall.js" }
             Write-Log 'autounattend.xml written'

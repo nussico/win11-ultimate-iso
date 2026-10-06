@@ -8,6 +8,40 @@ $GenericKeys = @{
     'Windows 11 Enterprise' = 'XGVPP-NMH47-7TTHJ-W3FW7-8HV2C'
 }
 
+# Turns `winget search` output into Name/Id pairs. Columns are found from the header line (above the
+# dashes), so a translated header still works.
+function ConvertFrom-WingetSearch([string[]]$Lines) {
+    $sep = [array]::FindIndex($Lines, [Predicate[string]] { param($l) $l -match '^-{10,}' })
+    if ($sep -lt 1) { return }
+    $cols = [regex]::Matches($Lines[$sep - 1], '\S+')
+    if ($cols.Count -lt 3) { return }
+    $idAt = $cols[1].Index; $verAt = $cols[2].Index
+    foreach ($l in $Lines[($sep + 1)..($Lines.Count - 1)]) {
+        if ($l.Length -le $verAt) { continue }
+        $id = $l.Substring($idAt, $verAt - $idAt).Trim()
+        if ($id -match $WingetIdPattern) { [pscustomobject]@{ Name = $l.Substring(0, $idAt).Trim(); Id = $id } }
+    }
+}
+$WingetIdPattern = '^[A-Za-z0-9][\w.+-]*$'
+
+# First-logon script for the chosen apps. App Installer (winget) registers a little after the first login
+# and needs internet, so wait for both; the log lands in C:\Users\Public\Documents.
+function New-AppsScript([string[]]$Ids) {
+    $list = ($Ids | Where-Object { $_ -match $WingetIdPattern } | ForEach-Object { "'$_'" }) -join ', '
+    @'
+$log = "$env:PUBLIC\Documents\Win11Ultimate-apps.log"
+Write-Host 'Installing apps with winget, please wait...'
+for ($i = 0; $i -lt 60 -and -not ((Get-Command winget -ErrorAction SilentlyContinue) -and [Net.NetworkInformation.NetworkInterface]::GetIsNetworkAvailable()); $i++) {
+    try { Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe -ErrorAction Stop } catch { }
+    Start-Sleep 5
+}
+foreach ($id in @(__IDS__)) {
+    Write-Host "Installing $id"; "== $id" | Add-Content $log
+    winget install --id $id -e --silent --accept-package-agreements --accept-source-agreements --disable-interactivity 2>&1 | Add-Content $log
+}
+'@.Replace('__IDS__', $list)
+}
+
 # Unattend "obfuscation" (base64 of UTF-16 password + suffix). Not encryption.
 function ConvertTo-UnattendPassword($Pw, $Suffix) {
     [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("$Pw$Suffix"))
@@ -70,6 +104,7 @@ function New-UnattendXml($u) {
     }
     $cmds = @()
     if ($u.EnableAdmin) { $cmds += 'net user Administrator /active:yes' }
+    if ($u.Apps) { $cmds += 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Setup\Scripts\apps.ps1' }
     if ($u.CustomScript) { $cmds += 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Setup\Scripts\custom.ps1' }
     if ($u.RunWinUtil) { $cmds += 'powershell -NoProfile -ExecutionPolicy Bypass -Command "irm christitus.com/win | iex"' }
     $flc = ''
