@@ -49,7 +49,7 @@ Manual: download the repo ZIP, extract, right-click `Builder.ps1` -> *Run with P
 - **Build plan**: the Build page shows what will happen before you start (reuse or download, time, disk space). Taskbar progress, and the window flashes when done.
 - **Storage**: sizes of ISOs, builds and leftovers; *Clean up* deletes temp files and outdated downloads (never your own ISOs).
 - **Test in VM**: one click creates a Hyper-V VM (no TPM, so it tests the bypasses) that boots the built ISO.
-- **Automatic install**: *Best SSD* picks the one clear best internal disk (NVMe > SSD > HDD, never USB) with a 10 s cancel countdown, otherwise normal setup opens.
+- **Automatic install**: *Best SSD* picks the one clear best internal disk (NVMe > SSD > HDD, never USB) with a 10 s cancel countdown, otherwise normal setup opens. Before building, the warning shows which disk it would erase on *this* PC.
 
 ## Requirements
 

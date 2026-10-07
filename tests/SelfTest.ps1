@@ -102,6 +102,11 @@ Set-Content $jsFile $js -Encoding ASCII
 $res = @(cscript //nologo //E:jscript $jsFile)
 Remove-Item $jsFile
 $i = 0; foreach ($name in $cases.Keys) { Assert ($res[$i++] -eq 'ok') $name }
+# Builder's wipe preview: same script on this PC, read-only.
+Set-Content $jsFile ("var PREVIEW = true;`r`n" + (Get-Content "$root\lib\autoinstall.js" -Raw)) -Encoding ASCII
+$res = @(cscript //nologo //E:jscript $jsFile)
+Remove-Item $jsFile
+Assert ($res[0] -match '^(PICK Disk \d+: |NOPICK$)' -and ($res | Select-Object -Skip 1) -match '^Disk \d+: .+ GB, ') 'Wipe preview lists this PC''s disks'
 
 # Source
 $info = ConvertTo-IsoInfo 'x.iso' @([pscustomobject]@{ ImageIndex = 1; ImageName = 'Windows 11 Home' }, [pscustomobject]@{ ImageIndex = 6; ImageName = 'Windows 11 Pro' }) ([pscustomobject]@{ Languages = @('de-DE'); Version = '10.0.26200.6584' })

@@ -492,6 +492,19 @@ $timer.Add_Tick({
         }
     })
 
+# What the automatic install would erase if this PC booted the ISO: runs autoinstall.js itself (same rules), read-only.
+function Get-WipePreview($Mode) {
+    $f = Join-Path $env:TEMP 'w11-wipe-preview.js'
+    try {
+        Set-Content $f ("var PREVIEW = true;`r`n" + (Get-Content "$root\lib\autoinstall.js" -Raw)) -Encoding ASCII
+        $out = @(cscript //nologo //E:jscript $f)
+    } catch { return "On THIS PC: could not read the disks ($_)." } finally { Remove-Item $f -ErrorAction SilentlyContinue }
+    $disks = @($out | Select-Object -Skip 1 | Sort-Object)
+    $pick = if ($Mode -eq 'Disk0') { $disks -like 'Disk 0:*' } elseif ($out[0] -like 'PICK *') { $out[0].Substring(5) }
+    $head = if ($pick) { "On THIS PC it would erase:`n  $pick" } else { 'On THIS PC: no single best disk, normal setup would open (nothing erased).' }
+    "$head`n`nDisks in this PC:`n  $($disks -join "`n  ")`n(Disk numbers can differ when booted from the USB stick.)"
+}
+
 $ui.BuildBtn.Add_Click({
         if ($script:job) {
             $script:sync.Cancel = $true; $ui.BuildBtn.IsEnabled = $false
@@ -503,7 +516,7 @@ $ui.BuildBtn.Add_Click({
         if ($cfg.Unattend.Enabled -and $cfg.Unattend.AutoInstall -ne 'Off') {
             $what = if ($cfg.Unattend.AutoInstall -eq 'Disk0') { 'DISK 0 of any PC booted from this ISO will be ERASED without asking.' }
                     else { 'Any PC booted from this ISO with one clear best disk will have that disk ERASED after a 10 second countdown.' }
-            if ((Show-Msg "Automatic install is ON.`n`n$what`n`nBuild anyway?" 'Warning' 'YesNo') -ne 'Yes') { return }
+            if ((Show-Msg "Automatic install is ON.`n`n$what`n`n$(Get-WipePreview $cfg.Unattend.AutoInstall)`n`nBuild anyway?" 'Warning' 'YesNo') -ne 'Yes') { return }
         }
         Get-PresetData $cfg | ConvertTo-Json -Depth 4 | Set-Content $lastPreset
         try { Hyper-V\Get-VMDvdDrive -VMName $vmName -ErrorAction Stop | Where-Object Path -eq $cfg.Output | Hyper-V\Set-VMDvdDrive -Path $null } catch { }
