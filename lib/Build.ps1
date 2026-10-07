@@ -71,6 +71,16 @@ function Get-IsoLabel($Version) {
 
 # Name of the cached finished install.wim. Same source ISOs, editions, patches, compression and patch code
 # = same image, so a rebuild that only changes Unattended/apps/output reuses it and skips steps 3, 4 and 7.
+function Get-ImageCachePath($Cfg, $Sources) {
+    # ponytail: no cache with 'drivers' (folder contents are not in the key); add a file list to the key if that matters.
+    if ('drivers' -notin $Cfg.Patches) { Join-Path $Cfg.CacheDir (Get-ImageCacheKey $Cfg $Sources) }
+}
+# Free space a build needs (work folder, mounted image, ISO, cache). Measured peak is lower; this keeps headroom.
+function Get-NeededGB([bool]$Cached) { if ($Cached) { 15 } else { 60 } }
+function Assert-FreeSpace($Path, [bool]$Cached) {
+    $need = Get-NeededGB $Cached; $free = (Get-PSDrive $Path.Substring(0, 1)).Free
+    if ($free -lt $need * 1GB) { throw "Need $need GB free on $($Path.Substring(0,2)), have $([math]::Round($free/1GB)) GB" }
+}
 function Get-ImageCacheKey($Cfg, $Sources) {
     $parts = @($Sources | ForEach-Object { $f = Get-Item $_.Iso; "$($f.FullName)|$($f.Length)|$($f.LastWriteTimeUtc.Ticks)|$($_.Name)" }) +
         ($Cfg.Patches -join ',') + "$($Cfg.QuickCompress)" + (Get-Content "$PSScriptRoot\Patches.ps1", "$PSScriptRoot\Build.ps1" -Raw)
@@ -136,9 +146,8 @@ function Invoke-Build($Cfg, $Sync) {
         Enter-Step 1 'Preflight'
         $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole('Administrators')
         if (-not $isAdmin) { throw 'Must run as administrator' }
-        $free = (Get-PSDrive ($w.Substring(0, 1))).Free
-        if ($free -lt 60GB) { throw "Need 60 GB free on $($w.Substring(0,2)), have $([math]::Round($free/1GB)) GB" }
-        Write-Log "Free space on $($w.Substring(0,2)): $([math]::Round($free/1GB)) GB"
+        Assert-FreeSpace $w $true   # full check once step 2 knows whether the cached image is reused
+        Write-Log "Free space on $($w.Substring(0,2)): $([math]::Round((Get-PSDrive $w.Substring(0, 1)).Free/1GB)) GB"
         Clear-BuildState
         Clear-WindowsCorruptMountPoint | Out-Null
         if (Test-Path $w) {
@@ -167,6 +176,7 @@ function Invoke-Build($Cfg, $Sync) {
             $sources += $Cfg.Editions | Where-Object { $_ -in $base.Editions.Name } | ForEach-Object { @{ Iso = $base.Path; Name = $_ } }
         }
         if ($missing) {
+            Assert-FreeSpace $w $false
             Write-Log "Downloading via UUP dump: $($missing -join ', ') (this takes a while)"
             if ($Cfg.Fast) { Write-Log 'Fast mode: latest update not integrated (Windows Update installs it after setup)' }
             $t = Get-Date
@@ -189,9 +199,9 @@ function Invoke-Build($Cfg, $Sync) {
         $ErrorActionPreference = 'Stop'
 
 
-        # ponytail: no cache with 'drivers' (folder contents are not in the key); add a file list to the key if that matters.
-        $cacheWim = if ('drivers' -notin $Cfg.Patches) { Join-Path $Cfg.CacheDir (Get-ImageCacheKey $Cfg $sources) }
+        $cacheWim = Get-ImageCachePath $Cfg $sources
         $cached = $cacheWim -and (Test-Path $cacheWim)
+        if (-not $cached) { Assert-FreeSpace $w $false }
 
         Enter-Step 3 'Editions'
         if ($cached) { Write-Log 'Same source ISO, editions and patches as the last build: reusing the finished image (steps 3, 4 and 7 skipped)' }
@@ -289,6 +299,7 @@ function Invoke-Build($Cfg, $Sync) {
         Enter-Step 9 'Finish'
         $saved = $Cfg.Clone(); $saved.Unattend = $Cfg.Unattend.Clone(); $saved.Unattend.Password = ''; $saved.Unattend.ProductKey = ''; $saved.Unattend.WifiPassword = ''   # never write secrets to disk
         $saved | ConvertTo-Json -Depth 5 | Set-Content (Join-Path (Split-Path $Cfg.Output) 'config.json')
+        Copy-Item "$w\iso\Win11Ultimate-preset.json" (Split-Path $Cfg.Output)   # same preset as on the ISO, for Load
         Remove-ImagePath $w
         Write-Log "DONE: $($Cfg.Output) ($([math]::Round((Get-Item $Cfg.Output).Length/1GB,1)) GB)"
     } catch {

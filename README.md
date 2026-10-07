@@ -29,7 +29,7 @@ Manual: download the repo ZIP, extract, right-click `Builder.ps1` -> *Run with P
 - **Sources**: your own official ISOs, and/or automatic download through [UUP dump](https://uupdump.net)
   (Home, Pro, Education, Enterprise).
 - **Language**: one language per ISO (setup and Windows); more can be added later in Windows Settings.
-- **Presets**: Basic, Recommended, CTT, Extreme, or tick everything yourself. *Save* / *Load* keeps your own setup in a .json file (no password, product key or paths), e.g. for another PC.
+- **Presets**: Basic, Recommended, CTT, Extreme, or tick everything yourself. *Save* / *Load* keeps your own setup in a .json file (no password, product key or paths), e.g. for another PC. *Last build* loads the settings of your last build, so with *Auto* one more click on Build gives you the same ISO with the newest Windows.
 - **Patches**
   - Setup: TPM / Secure Boot / RAM / CPU checks, local account, skip privacy screens, no auto-BitLocker
   - Apps: preinstalled bloat, Xbox app, OneDrive. Essential apps (Store, winget, Calculator, Photos, Xbox login, Game Bar...) are protected
@@ -44,7 +44,7 @@ Manual: download the repo ZIP, extract, right-click `Builder.ps1` -> *Run with P
 - **Unattended**: local account (default `User`), timezone, keyboard, skip OOBE, product key, run WinUtil or your own script after first login.
 - **Wi-Fi**: network name + password; Windows joins it after the first login, so apps install without a cable. The password is in plain text on the ISO (never in config.json or preset files), and the file is deleted from the PC after it is imported.
 - **Apps**: search winget in the builder and add apps (Steam, Discord, Firefox...); they install automatically after the first login.
-- **Version stamp**: every ISO is named `W11U_<version>` (shown in Explorer and on the USB stick) and has a `Win11Ultimate.txt` saying which builder version made it and with which editions and patches, plus `Win11Ultimate-preset.json` you can *Load* to build it again.
+- **Version stamp**: every ISO is named `W11U_<version>` (shown in Explorer and on the USB stick) and has a `Win11Ultimate.txt` saying which builder version made it and with which editions and patches, plus `Win11Ultimate-preset.json` (also next to the ISO in the output folder) you can *Load* to build it again.
 - **Image cache**: the finished Windows image is kept, so a rebuild with the same source ISO, editions and patches (e.g. only Unattended or apps changed) skips mounting, patching and compressing and takes a few minutes. *Clean up* deletes it.
 - **Build plan**: the Build page shows what will happen before you start (reuse or download, time, disk space). Taskbar progress, and the window flashes when done.
 - **Storage**: sizes of ISOs, builds and leftovers; *Clean up* deletes temp files and outdated downloads (never your own ISOs).
@@ -53,7 +53,7 @@ Manual: download the repo ZIP, extract, right-click `Builder.ps1` -> *Run with P
 
 ## Requirements
 
-Windows 10/11, admin rights, about 60 GB free disk space, internet for UUP dump.
+Windows 10/11, admin rights, about 60 GB free disk space (15 GB when the cached image is reused), internet for UUP dump.
 The first build installs the Windows ADK *Deployment Tools* via winget.
 
 ## Presets

@@ -20,7 +20,7 @@ if (-not (Test-Path "$root\.git")) {
     $lnk.Arguments = "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File `"$root\Builder.ps1`""
     $lnk.WorkingDirectory = $root; $lnk.IconLocation = "$root\lib\app.ico"; $lnk.Save()
 }
-. "$root\lib\Patches.ps1"; . "$root\lib\Unattend.ps1"; . "$root\lib\Source.ps1"
+. "$root\lib\Patches.ps1"; . "$root\lib\Unattend.ps1"; . "$root\lib\Source.ps1"; . "$root\lib\Build.ps1"
 
 $xaml = [xml](Get-Content "$root\lib\Window.xaml" -Raw)
 $win = [Windows.Markup.XamlReader]::Load((New-Object Xml.XmlNodeReader $xaml))
@@ -257,10 +257,15 @@ function Import-PresetFile($p) {
 $ui.SavePreset.Add_Click({
         $d = New-Object Windows.Forms.SaveFileDialog -Property @{ Filter = 'Preset (*.json)|*.json'; FileName = 'my-preset.json' }
         if ($d.ShowDialog() -eq 'OK') { Get-PresetData (Get-Config) | ConvertTo-Json -Depth 4 | Set-Content $d.FileName } })
+function Import-PresetPath($Path) {
+    try { Import-PresetFile (Get-Content $Path -Raw | ConvertFrom-Json) } catch { $script:applying = $false; Show-Msg "Could not load this preset:`n`n$_" 'Error' | Out-Null }
+}
 $ui.LoadPreset.Add_Click({
         $d = New-Object Windows.Forms.OpenFileDialog -Property @{ Filter = 'Preset (*.json)|*.json' }
-        if ($d.ShowDialog() -ne 'OK') { return }
-        try { Import-PresetFile (Get-Content $d.FileName -Raw | ConvertFrom-Json) } catch { $script:applying = $false; Show-Msg "Could not load this preset:`n`n$_" 'Error' | Out-Null } })
+        if ($d.ShowDialog() -eq 'OK') { Import-PresetPath $d.FileName } })
+# Written on every build start; never loaded automatically (each start uses defaults).
+$lastPreset = "$root\last-preset.json"
+$ui.LoadLast.Add_Click({ if (Test-Path $lastPreset) { Import-PresetPath $lastPreset } else { Show-Msg 'No build yet.' | Out-Null } })
 
 function Invoke-Scan {
     $win.Cursor = 'Wait'; $ui.ScanResult.Text = 'Scanning...'
@@ -349,10 +354,14 @@ function Update-Plan {
         }
         $lines += "Editions: $($cfg.Editions -join ', ')  ($($cfg.BaseLang))"
         $lines += "Patches: $($cfg.Patches.Count) selected$(if ($cfg.Unattend.Enabled) { ', unattended setup' })"
-        $min = 2 + $(if ($cfg.QuickCompress) { 6 } else { 10 }) * $cfg.Editions.Count + $(if ($p.Missing) { if ($cfg.Fast) { 15 } else { 60 } } else { 0 })
-        $lines += "Time: about $min minutes"
-        $drive = Get-PSDrive $root.Substring(0, 1)
-        $lines += "Disk: needs 60 GB free on $($root.Substring(0, 2)), you have $([math]::Round($drive.Free / 1GB)) GB$(if ($drive.Free -lt 60GB) { '  - NOT ENOUGH' })"
+        # Same cache check as the build. Times from real builds: 1 edition, max compression = about 9 min.
+        $cachePath = if ($p.Base -and -not $p.Missing) { Get-ImageCachePath $cfg @($cfg.Editions | ForEach-Object { @{ Iso = $p.Base.Path; Name = $_ } }) }
+        $cached = $cachePath -and (Test-Path $cachePath)
+        $min = if ($cached) { 3 } else { 2 + $(if ($cfg.QuickCompress) { 5 } else { 7 }) * $cfg.Editions.Count }
+        $min += $(if ($p.Missing) { if ($cfg.Fast) { 15 } else { 60 } } else { 0 })
+        $lines += "Time: about $min minutes$(if ($cached) { ' (reusing the finished image from the last build)' })"
+        $need = Get-NeededGB $cached; $free = [math]::Round((Get-PSDrive $root.Substring(0, 1)).Free / 1GB)
+        $lines += "Disk: needs $need GB free on $($root.Substring(0, 2)), you have $free GB$(if ($free -lt $need) { '  - NOT ENOUGH' })"
         $ui.PlanText.Text = $lines -join "`n"
     } catch { $ui.PlanText.Text = "Plan not available: $_" }
 }
@@ -473,6 +482,7 @@ $ui.BuildBtn.Add_Click({
                     else { 'Any PC booted from this ISO with one clear best disk will have that disk ERASED after a 10 second countdown.' }
             if ((Show-Msg "Automatic install is ON.`n`n$what`n`nBuild anyway?" 'Warning' 'YesNo') -ne 'Yes') { return }
         }
+        Get-PresetData $cfg | ConvertTo-Json -Depth 4 | Set-Content $lastPreset
         try { Hyper-V\Get-VMDvdDrive -VMName $vmName -ErrorAction Stop | Where-Object Path -eq $cfg.Output | Hyper-V\Set-VMDvdDrive -Path $null } catch { }
         $ui.Log.Clear(); $ui.Progress.BeginAnimation([Windows.Controls.ProgressBar]::ValueProperty, $null); $ui.Progress.Value = 0; $script:shownStep = 0; $script:buildStart = Get-Date; $ui.StepText.Text = 'Starting...'
         $script:sync = [hashtable]::Synchronized(@{ Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]'; Step = 0; Cancel = $false; Done = $false; Error = $null })

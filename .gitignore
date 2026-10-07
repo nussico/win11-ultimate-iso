@@ -7,3 +7,4 @@ sources/*
 vm/
 
 # your remembered GUI choices
+last-preset.json

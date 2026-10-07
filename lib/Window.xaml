@@ -212,6 +212,7 @@
           <ComboBox x:Name="Preset" Width="150"/>
           <Button x:Name="SavePreset" Content="Save" Margin="8,0,0,0" ToolTip="Save these settings to a preset file (no password or product key)"/>
           <Button x:Name="LoadPreset" Content="Load" Margin="6,0,0,0" ToolTip="Load settings from a preset file"/>
+          <Button x:Name="LoadLast" Content="Last build" Margin="6,0,0,0" ToolTip="Load the settings of your last build (Auto then picks the newest Windows)"/>
         </StackPanel>
         <ListBox x:Name="Nav" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource Nav}" VerticalAlignment="Center" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
           <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ListBox.ItemsPanel>
