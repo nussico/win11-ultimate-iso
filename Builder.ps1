@@ -48,8 +48,13 @@ public static void Flash(IntPtr h) { var f = new FLASHWINFO(); f.cbSize = (uint)
 '@
 
 # --- Navigation ---
-# Narrow window: drop the summary from the top bar so all tabs stay visible.
-$win.Add_SizeChanged({ $ui.Summary.Visibility = if ($win.ActualWidth -lt 1150) { 'Collapsed' } else { 'Visible' } })
+# Narrow window: drop the summary from the top bar when the tabs would be cut off.
+function Update-TopBar {
+    $ui.Summary.Visibility = 'Visible'; $win.UpdateLayout()
+    $last = $ui.Nav.ItemContainerGenerator.ContainerFromIndex($ui.Nav.Items.Count - 1)
+    if ($last -and $last.TranslatePoint((New-Object Windows.Point $last.ActualWidth, 0), $ui.Nav).X -gt $ui.Nav.ActualWidth) { $ui.Summary.Visibility = 'Collapsed' }
+}
+$win.Add_SizeChanged({ Update-TopBar })
 $ui.Nav.Add_SelectionChanged({
         foreach ($i in $ui.Nav.Items) { $ui[$i.Tag].Visibility = if ($i.IsSelected) { 'Visible' } else { 'Collapsed' } }
         if ($ui.Nav.SelectedItem.Tag -eq 'PageBuild') { Update-Plan }
@@ -78,7 +83,7 @@ $repo = 'nussico/win11-ultimate-iso'
 try {
     $have = (Get-Content "$root\version.txt" -ErrorAction Stop).Trim()
     $latest = Invoke-RestMethod "https://api.github.com/repos/$repo/commits/main" -Headers @{ Accept = 'application/vnd.github.sha' } -TimeoutSec 5
-    if ($latest -and $latest.Trim() -ne $have) { $ui.UpdateBtn.Visibility = 'Visible' }
+    if ($latest -and $latest.Trim() -ne $have) { $ui.UpdateBtn.Visibility = 'Visible'; $ui.SubTitle.Visibility = 'Collapsed' }
 } catch { }   # manual install, offline or rate-limited: no button
 # --- Info page ---
 # Short commit from install.ps1, stamped on every ISO (label, Win11Ultimate.txt, log); 'dev' for a git checkout.
@@ -232,6 +237,7 @@ function Update-Summary {
     $ed = @($script:edChecks.Keys | Where-Object { $script:edChecks[$_].IsChecked }).Count
     $pa = @($patchChecks.Values | Where-Object IsChecked).Count
     $ui.Summary.Text = "$ed editions, $($ui.BaseLang.SelectedItem), $pa patches" + $(if ($ui.UnattendOn.IsChecked) { ', unattended' } else { '' })
+    if ($win.IsLoaded) { Update-TopBar }
 }
 $ui.Preset.Add_SelectionChanged({ Set-Preset $ui.Preset.SelectedItem })
 foreach ($c in @($patchChecks.Values) + $ui.SkipOobe + $ui.RunWinUtil) {
