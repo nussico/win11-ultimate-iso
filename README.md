@@ -16,7 +16,8 @@ irm https://raw.githubusercontent.com/nussico/win11-ultimate-iso/main/install.ps
 
 It asks which drive to use (Enter = the drive it is already on, or the one with the most free space), downloads the
 builder to `Win11UltimateBuilder` there and starts it as admin.
-Next time, start it with the *Win11 Ultimate ISO Builder* shortcut in that folder (nothing is added to Start menu or desktop). When a new version is out, an **Update available** button shows in the top bar:
+Next time, start it with the *Win11 Ultimate ISO Builder* shortcut in that folder (nothing is added to Start menu or desktop).
+Moved the folder? Right-click `Builder.ps1` -> *Run with PowerShell* once and the shortcut works again. When a new version is out, an **Update available** button shows in the top bar:
 one click updates and restarts. Your ISOs, output and cache are kept.
 
 Manual: download the repo ZIP, extract, right-click `Builder.ps1` -> *Run with PowerShell*.

@@ -12,6 +12,14 @@ Add-Type -AssemblyName PresentationFramework, System.Windows.Forms
 trap { [Windows.MessageBox]::Show("The builder could not start:`n`n$_`n`n$($_.InvocationInfo.PositionMessage)", 'Win11 Ultimate', 'OK', 'Error') | Out-Null; exit 1 }
 
 $root = $PSScriptRoot
+# Launcher shortcut in the install folder, rewritten on every start: a .lnk holds full paths, so after the folder
+# is moved, starting Builder.ps1 once makes it work again. Not for a git checkout.
+if (-not (Test-Path "$root\.git")) {
+    $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut("$root\Win11 Ultimate ISO Builder.lnk")
+    $lnk.TargetPath = "$env:SystemRoot\System32\conhost.exe"
+    $lnk.Arguments = "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File `"$root\Builder.ps1`""
+    $lnk.WorkingDirectory = $root; $lnk.IconLocation = "$root\lib\app.ico"; $lnk.Save()
+}
 . "$root\lib\Patches.ps1"; . "$root\lib\Unattend.ps1"; . "$root\lib\Source.ps1"
 
 $xaml = [xml](Get-Content "$root\lib\Window.xaml" -Raw)
