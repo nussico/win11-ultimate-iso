@@ -108,8 +108,8 @@ function Clear-BuildState {
 # Optional speed-up: Defender scans every file DISM writes. Excludes only the work folder, only for this build.
 function Add-DefenderExclusion($Path) {
     try {
-        if ($Path -in @((Get-MpPreference).ExclusionPath)) { return }
-        Add-MpPreference -ExclusionPath $Path -ErrorAction Stop
+        # Already there = left over from a killed build (the work folder is ours alone): reuse it, still remove it at the end.
+        if ($Path -notin @((Get-MpPreference).ExclusionPath)) { Add-MpPreference -ExclusionPath $Path -ErrorAction Stop }
         $script:DefenderExcluded = $Path
         Write-Log "Defender exclusion added for $Path (removed when the build ends)"
     } catch { Write-Log "NOTE: could not add Defender exclusion ($_) - building without it" }

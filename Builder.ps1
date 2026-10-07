@@ -420,10 +420,11 @@ $ui.TestVm.Add_Click({
             $vm = Hyper-V\New-VM @vmArgs
             Hyper-V\Set-VM $vm -ProcessorCount ([math]::Min(4, [Environment]::ProcessorCount)) -AutomaticCheckpointsEnabled $false
             $dvd = Hyper-V\Add-VMDvdDrive -VM $vm -Path $iso -Passthru
-            Hyper-V\Set-VMFirmware -VM $vm -FirstBootDevice $dvd
+            # Disk first: empty at the start so the DVD boots; after the install Windows starts instead of setup again.
+            Hyper-V\Set-VMFirmware -VM $vm -BootOrder @(@(Hyper-V\Get-VMHardDiskDrive -VM $vm) + $dvd + @(Hyper-V\Get-VMNetworkAdapter -VM $vm))
             Start-Process vmconnect.exe -ArgumentList 'localhost', "`"$vmName`""
             Show-Msg ("Test VM '$vmName' created (4 GB RAM, 80 GB disk, no TPM - that tests the hardware-check bypass).`n`n" +
-                "In the VM window click Start, then quickly press a key when it says 'Press any key to boot from CD or DVD'.") | Out-Null
+                "In the VM window click Start, then quickly press a key when it says 'Press any key to boot from CD or DVD'. Only that first time: after setup reboots, Windows starts from the disk.") | Out-Null
         } catch { Show-Msg "Could not create the VM:`n$_" 'Error' | Out-Null }
         finally { $win.Cursor = $null; Update-Storage }
     })
