@@ -338,6 +338,18 @@ function Show-Field($Name) {
     }
 }
 
+# Minutes for steps 3-9 (Cached = whole image reused, Quick/Max = per edition). Defaults until a build on this PC measured them.
+$timingFile = "$root\timing.json"
+function Get-Timing {
+    $t = @{ Cached = 2; Quick = 6; Max = 8; Measured = @() }
+    try { $j = Get-Content $timingFile -Raw -ErrorAction Stop | ConvertFrom-Json; foreach ($k in $j.PSObject.Properties.Name) { $t[$k] = [double]$j.$k; $t.Measured += $k } } catch { }
+    $t
+}
+function Save-Timing($Key, [double]$Minutes) {
+    $t = Get-Timing; $o = [ordered]@{}; foreach ($k in $t.Measured + $Key | Select-Object -Unique) { $o[$k] = $t[$k] }
+    $o[$Key] = [math]::Round($Minutes, 1); $o | ConvertTo-Json | Set-Content $timingFile
+}
+
 # --- Plan (same decision logic as the build) ---
 function Update-Plan {
     try {
@@ -354,12 +366,15 @@ function Update-Plan {
         }
         $lines += "Editions: $($cfg.Editions -join ', ')  ($($cfg.BaseLang))"
         $lines += "Patches: $($cfg.Patches.Count) selected$(if ($cfg.Unattend.Enabled) { ', unattended setup' })"
-        # Same cache check as the build. Times from real builds: 1 edition, max compression = about 9 min.
+        # Same cache check as the build. Image time (steps 3-9) is measured on this PC after each build.
         $cachePath = if ($p.Base -and -not $p.Missing) { Get-ImageCachePath $cfg @($cfg.Editions | ForEach-Object { @{ Iso = $p.Base.Path; Name = $_ } }) }
         $cached = $cachePath -and (Test-Path $cachePath)
-        $min = if ($cached) { 3 } else { 2 + $(if ($cfg.QuickCompress) { 5 } else { 7 }) * $cfg.Editions.Count }
+        $script:planKey = if ($cached) { 'Cached' } elseif ($cfg.QuickCompress) { 'Quick' } else { 'Max' }; $script:planEds = $cfg.Editions.Count
+        $t = Get-Timing
+        $min = 1 + [math]::Ceiling($t.($script:planKey) * $(if ($cached) { 1 } else { $script:planEds }))
         $min += $(if ($p.Missing) { if ($cfg.Fast) { 15 } else { 60 } } else { 0 })
-        $lines += "Time: about $min minutes$(if ($cached) { ' (reusing the finished image from the last build)' })"
+        $lines += "Time: about $min minutes$(if ($cached) { ' (reusing the finished image from the last build)' })" +
+            $(if ($t.Measured -contains $script:planKey) { ', measured on this PC' } else { ', estimate until the first build on this PC' })
         $need = Get-NeededGB $cached; $free = [math]::Round((Get-PSDrive $root.Substring(0, 1)).Free / 1GB)
         $lines += "Disk: needs $need GB free on $($root.Substring(0, 2)), you have $free GB$(if ($free -lt $need) { '  - NOT ENOUGH' })"
         $ui.PlanText.Text = $lines -join "`n"
@@ -449,6 +464,7 @@ $timer.Add_Tick({
         $s = [math]::Min(9, $script:sync.Step)
         if ($s -ne $script:shownStep) {   # glide to the new step instead of jumping
             $script:shownStep = $s; $script:stepStart = Get-Date
+            if ($s -eq 3) { $script:imageStart = Get-Date }   # after the download, so the measured time is this PC's own speed
             $ui.Progress.BeginAnimation([Windows.Controls.ProgressBar]::ValueProperty, (New-Object Windows.Media.Animation.DoubleAnimation $s, ([Windows.Duration][TimeSpan]::FromMilliseconds(500))))
         }
         # Running clocks show the build is alive during long silent DISM operations.
@@ -465,7 +481,9 @@ $timer.Add_Tick({
             if (-not $win.IsActive) { [W11.Native]::Flash((New-Object Windows.Interop.WindowInteropHelper $win).Handle) }
             Update-Storage
             if ($script:sync.Error) { $ui.StepText.Text = 'Failed'; Show-Msg "Build failed:`n$($script:sync.Error)`n`nDetails: build-log.txt next to the ISO." 'Error' | Out-Null }
-            else { $ui.StepText.Text = 'Done'; Show-Msg "ISO ready:`n$($ui.Output.Text)" | Out-Null }
+            else {
+                if ($script:imageStart -and $script:planKey) { Save-Timing $script:planKey (((Get-Date) - $script:imageStart).TotalMinutes / $(if ($script:planKey -eq 'Cached') { 1 } else { $script:planEds })) }
+                $ui.StepText.Text = 'Done'; Show-Msg "ISO ready:`n$($ui.Output.Text)" | Out-Null }
         }
     })
 
@@ -485,6 +503,7 @@ $ui.BuildBtn.Add_Click({
         Get-PresetData $cfg | ConvertTo-Json -Depth 4 | Set-Content $lastPreset
         try { Hyper-V\Get-VMDvdDrive -VMName $vmName -ErrorAction Stop | Where-Object Path -eq $cfg.Output | Hyper-V\Set-VMDvdDrive -Path $null } catch { }
         $ui.Log.Clear(); $ui.Progress.BeginAnimation([Windows.Controls.ProgressBar]::ValueProperty, $null); $ui.Progress.Value = 0; $script:shownStep = 0; $script:buildStart = Get-Date; $ui.StepText.Text = 'Starting...'
+        $script:imageStart = $null; $script:planKey = $null; Update-Plan   # sets planKey / planEds for the timing
         $script:sync = [hashtable]::Synchronized(@{ Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]'; Step = 0; Cancel = $false; Done = $false; Error = $null })
         $ps = [powershell]::Create()
         $ps.AddScript({
