@@ -225,6 +225,15 @@ $Presets = [ordered]@{
         Unattend = @{ Enabled = $true; SkipOobe = $true; RunWinUtil = $true } }
 }
 
+# Preset file (Save/Load in the top bar): an allowlist of choices, so no password, product key or PC-specific paths.
+function Get-PresetData($Cfg) {
+    $p = [ordered]@{}
+    foreach ($k in 'BaseLang', 'Editions', 'Patches', 'UseUup', 'Newest', 'Fast', 'Split', 'QuickCompress', 'DefenderExclude') { $p[$k] = $Cfg[$k] }
+    $u = [ordered]@{}
+    foreach ($k in 'Enabled', 'UserName', 'AutoLogon', 'Admin', 'ComputerName', 'TimeZone', 'Keyboard', 'Locale', 'SkipOobe', 'Edition', 'AutoInstall', 'RunWinUtil', 'EnableAdmin', 'Apps') { $u[$k] = $Cfg.Unattend[$k] }
+    $p.Unattend = $u; $p
+}
+
 function Test-ProtectedApp($Name) { [bool]($ProtectedApps | Where-Object { $Name -like $_ }) }
 
 # Names from $Wanted that are provisioned and not protected.

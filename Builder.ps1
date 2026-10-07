@@ -177,7 +177,7 @@ $ui.UnattendOn.Add_Checked({ Set-UnattendBody }); $ui.UnattendOn.Add_Unchecked({
 # Apps: search winget on this PC, click a result to add it; click an added app (unchecks) to remove it.
 function Add-App($Name, $Id) {
     if ($Id -in @($ui.AppPanel.Children | ForEach-Object Tag)) { return }
-    $c = New-Check "$Name  ($Id)" 'Chip' $true; $c.Tag = $Id
+    $c = New-Check $(if ($Name -ne $Id) { "$Name  ($Id)" } else { $Id }) 'Chip' $true; $c.Tag = $Id
     $c.Add_Unchecked({ $ui.AppPanel.Children.Remove($this) })
     $ui.AppPanel.Children.Add($c) | Out-Null
 }
@@ -232,6 +232,35 @@ $ui.Preset.Add_SelectionChanged({ Set-Preset $ui.Preset.SelectedItem })
 foreach ($c in @($patchChecks.Values) + $ui.SkipOobe + $ui.RunWinUtil) {
     $c.Add_Click({ if (-not $script:applying) { $ui.Preset.SelectedItem = 'Custom' }; Update-Summary })
 }
+
+# Preset files: Save writes Get-PresetData as JSON, Load puts the values back into the controls.
+function Import-PresetFile($p) {
+    $set = { param($name, $v) if ($null -eq $v) { return }; $c = $ui[$name]
+        if ($c -is [Windows.Controls.Primitives.ToggleButton]) { $c.IsChecked = [bool]$v }
+        elseif ($c -is [Windows.Controls.ComboBox]) { if ("$v" -in @($c.Items)) { $c.SelectedItem = "$v" } }
+        else { $c.Text = "$v" } }
+    $script:applying = $true
+    foreach ($k in 'UseUup', 'Newest', 'Fast', 'Split', 'QuickCompress', 'DefenderExclude', 'BaseLang') { & $set $k $p.$k }
+    Update-Editions
+    if ($p.PSObject.Properties['Editions']) { foreach ($e in $script:edChecks.Keys) { $script:edChecks[$e].IsChecked = $e -in @($p.Editions) } }
+    if ($p.PSObject.Properties['Patches']) { foreach ($id in $patchChecks.Keys) { $patchChecks[$id].IsChecked = $id -in @($p.Patches) } }
+    if ($u = $p.Unattend) {
+        foreach ($k in 'UserName', 'AutoLogon', 'ComputerName', 'TimeZone', 'Keyboard', 'Locale', 'SkipOobe', 'RunWinUtil', 'EnableAdmin') { & $set $k $u.$k }
+        & $set 'UnattendOn' $u.Enabled; & $set 'AdminGroup' $u.Admin
+        $ui.SkipEdition.IsChecked = [bool]$u.Edition; & $set 'Edition' $u.Edition
+        $ai = @($ui.AutoInstall.Items | Where-Object Tag -eq $u.AutoInstall); if ($ai) { $ui.AutoInstall.SelectedItem = $ai[0] }
+        $ui.AppPanel.Children.Clear(); foreach ($id in @($u.Apps)) { if ("$id" -match $WingetIdPattern) { Add-App $id $id } }
+    }
+    $ui.Preset.SelectedItem = 'Custom'; $script:applying = $false
+    Update-Summary; Update-BuildHint
+}
+$ui.SavePreset.Add_Click({
+        $d = New-Object Windows.Forms.SaveFileDialog -Property @{ Filter = 'Preset (*.json)|*.json'; FileName = 'my-preset.json' }
+        if ($d.ShowDialog() -eq 'OK') { Get-PresetData (Get-Config) | ConvertTo-Json -Depth 4 | Set-Content $d.FileName } })
+$ui.LoadPreset.Add_Click({
+        $d = New-Object Windows.Forms.OpenFileDialog -Property @{ Filter = 'Preset (*.json)|*.json' }
+        if ($d.ShowDialog() -ne 'OK') { return }
+        try { Import-PresetFile (Get-Content $d.FileName -Raw | ConvertFrom-Json) } catch { $script:applying = $false; Show-Msg "Could not load this preset:`n`n$_" 'Error' | Out-Null } })
 
 function Invoke-Scan {
     $win.Cursor = 'Wait'; $ui.ScanResult.Text = 'Scanning...'

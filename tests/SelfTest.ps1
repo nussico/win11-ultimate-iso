@@ -130,9 +130,18 @@ Assert ($q.Body -match 'updates=0' -and $q.Updates -eq 0 -and $q.Edition -eq 'PR
 $q = Get-UupRequest @('Windows 11 Home', 'Windows 11 Enterprise') $false
 Assert ($q.Body -match 'updates=1' -and $q.Edition -eq 'CORE;PROFESSIONAL' -and $q.Body -match 'autodl=3' -and $q.Body -match 'virtualEditions\[\]=Enterprise') 'Normal mode + virtual edition adds Pro base'
 
+# Preset file: choices only, never secrets or paths
+$pd = Get-PresetData @{ BaseLang = 'de-de'; Editions = @('Windows 11 Pro'); Patches = @('hwchecks'); IsoFolder = 'D:\isos'; Output = 'D:\out\x.iso'
+    Unattend = @{ Enabled = $true; UserName = 'Max'; Password = 'secret1'; ProductKey = 'AAAAA-BBBBB-CCCCC-DDDDD-EEEEE'; CustomScript = 'D:\my.ps1'; Apps = @('Valve.Steam') } }
+$pj = $pd | ConvertTo-Json -Depth 4
+Assert ($pj -match 'Max' -and $pj -match 'Valve.Steam' -and $pj -match 'hwchecks' -and $pj -notmatch 'secret1|AAAAA|D:\\\\') 'Preset file: choices kept, no secrets or paths'
+
 # ISO version stamp (Build.ps1 loaded in a child scope so its Write-Log stays out of the way)
 & {
     . "$root\lib\Build.ps1"
+    $src = @(@{ Iso = $PSCommandPath; Name = 'Windows 11 Pro' })
+    $k = { param($p, $u) Get-ImageCacheKey @{ Patches = $p; QuickCompress = $true; Unattend = @{ UserName = $u } } $src }
+    Assert ((& $k @('hwchecks') 'A') -eq (& $k @('hwchecks') 'B') -and (& $k @('hwchecks') 'A') -ne (& $k @('hwchecks', 'telemetry') 'A') -and (& $k @('hwchecks') 'A') -match '^install-[0-9a-f]{16}\.wim$') 'Image cache: reused when only Unattended changes, new when patches change'
     Assert ((Get-IsoLabel '99cfb89') -eq 'W11U_99CFB89' -and (Get-IsoLabel '') -eq 'W11U_DEV' -and (Get-IsoLabel 'a b-c!') -eq 'W11U_ABC') 'ISO label: W11U_<version>, safe characters only'
     $t = Get-IsoInfoText @{ ToolVersion = '99cfb89'; Editions = @('Windows 11 Pro'); BaseLang = 'de-de'; Patches = @('hwchecks')
         Unattend = @{ Enabled = $true; AutoInstall = 'BestSsd'; Apps = @('Valve.Steam'); Password = 'secret1'; ProductKey = 'AAAAA-BBBBB-CCCCC-DDDDD-EEEEE' } }

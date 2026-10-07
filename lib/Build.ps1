@@ -69,6 +69,15 @@ function Get-IsoLabel($Version) {
     "W11U_$(if ($v) { $v } else { 'dev' })".ToUpper()
 }
 
+# Name of the cached finished install.wim. Same source ISOs, editions, patches, compression and patch code
+# = same image, so a rebuild that only changes Unattended/apps/output reuses it and skips steps 3, 4 and 7.
+function Get-ImageCacheKey($Cfg, $Sources) {
+    $parts = @($Sources | ForEach-Object { $f = Get-Item $_.Iso; "$($f.FullName)|$($f.Length)|$($f.LastWriteTimeUtc.Ticks)|$($_.Name)" }) +
+        ($Cfg.Patches -join ',') + "$($Cfg.QuickCompress)" + (Get-Content "$PSScriptRoot\Patches.ps1", "$PSScriptRoot\Build.ps1" -Raw)
+    $hash = [Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($parts -join "`n"))
+    'install-' + (-join ($hash[0..7] | ForEach-Object { $_.ToString('x2') })) + '.wim'
+}
+
 # Text file in the ISO root: which builder version made it and with what. No password or product key.
 function Get-IsoInfoText($Cfg) {
     @(
@@ -180,8 +189,14 @@ function Invoke-Build($Cfg, $Sync) {
         $ErrorActionPreference = 'Stop'
 
 
+        # ponytail: no cache with 'drivers' (folder contents are not in the key); add a file list to the key if that matters.
+        $cacheWim = if ('drivers' -notin $Cfg.Patches) { Join-Path $Cfg.CacheDir (Get-ImageCacheKey $Cfg $sources) }
+        $cached = $cacheWim -and (Test-Path $cacheWim)
+
         Enter-Step 3 'Editions'
+        if ($cached) { Write-Log 'Same source ISO, editions and patches as the last build: reusing the finished image (steps 3, 4 and 7 skipped)' }
         foreach ($s in $sources) {
+            if ($cached) { break }
             $wim = Get-InstallImage (Mount-SourceIso $s.Iso)
             $idx = (Get-WindowsImage -ImagePath $wim | Where-Object ImageName -eq $s.Name).ImageIndex
             Write-Log "Export $($s.Name) (index $idx) - takes 1-3 minutes"
@@ -190,7 +205,7 @@ function Invoke-Build($Cfg, $Sync) {
         Clear-BuildState
 
         Enter-Step 4 'Patches'
-        $images = Get-WindowsImage -ImagePath "$w\install.wim"
+        $images = if (-not $cached) { Get-WindowsImage -ImagePath "$w\install.wim" }
         foreach ($img in $images) {
             if ($Sync.Cancel) { throw 'Cancelled by user' }
             Write-Log "Mount $($img.ImageName) - takes 1-2 minutes"
@@ -230,6 +245,14 @@ function Invoke-Build($Cfg, $Sync) {
         foreach ($img in $images) {
             Write-Log "Export $($img.ImageName) ($comp compression) - takes $(if ($Cfg.QuickCompress) { '1-3' } else { '5-10' }) minutes"
             Export-WindowsImage -SourceImagePath "$w\install.wim" -SourceIndex $img.ImageIndex -DestinationImagePath "$w\iso\sources\install.wim" -CompressionType $comp | Out-Null
+        }
+        if ($cached) { Write-Log 'Copying the cached image'; Copy-Item $cacheWim "$w\iso\sources\install.wim" }
+        elseif ($cacheWim) {
+            # Keep only the newest finished image (about 5 GB).
+            New-Item -ItemType Directory -Force $Cfg.CacheDir | Out-Null
+            Remove-Item "$($Cfg.CacheDir)\install-*.wim" -ErrorAction SilentlyContinue
+            Copy-Item "$w\iso\sources\install.wim" "$cacheWim.tmp"; Move-Item "$cacheWim.tmp" $cacheWim -Force   # never a half-written cache
+            Write-Log 'Finished image cached: the next build with the same editions and patches is much faster'
         }
         # Read back the final image so the report shows what actually ended up in it.
         foreach ($img in Get-WindowsImage -ImagePath "$w\iso\sources\install.wim") {
