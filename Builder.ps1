@@ -245,7 +245,7 @@ function Import-PresetFile($p) {
     if ($p.PSObject.Properties['Editions']) { foreach ($e in $script:edChecks.Keys) { $script:edChecks[$e].IsChecked = $e -in @($p.Editions) } }
     if ($p.PSObject.Properties['Patches']) { foreach ($id in $patchChecks.Keys) { $patchChecks[$id].IsChecked = $id -in @($p.Patches) } }
     if ($u = $p.Unattend) {
-        foreach ($k in 'UserName', 'AutoLogon', 'ComputerName', 'TimeZone', 'Keyboard', 'Locale', 'SkipOobe', 'RunWinUtil', 'EnableAdmin') { & $set $k $u.$k }
+        foreach ($k in 'UserName', 'AutoLogon', 'ComputerName', 'TimeZone', 'Keyboard', 'Locale', 'SkipOobe', 'RunWinUtil', 'EnableAdmin', 'WifiName') { & $set $k $u.$k }
         & $set 'UnattendOn' $u.Enabled; & $set 'AdminGroup' $u.Admin
         $ui.SkipEdition.IsChecked = [bool]$u.Edition; & $set 'Edition' $u.Edition
         $ai = @($ui.AutoInstall.Items | Where-Object Tag -eq $u.AutoInstall); if ($ai) { $ui.AutoInstall.SelectedItem = $ai[0] }
@@ -294,7 +294,7 @@ function Get-Config {
             SkipOobe = [bool]$ui.SkipOobe.IsChecked; Edition = $(if ($ui.SkipEdition.IsChecked) { [string]$ui.Edition.SelectedItem } else { '' })
             ProductKey = $ui.ProductKey.Text.Trim().ToUpper(); AutoInstall = [string]$ui.AutoInstall.SelectedItem.Tag
             RunWinUtil = [bool]$ui.RunWinUtil.IsChecked; CustomScript = $ui.CustomScript.Text; EnableAdmin = [bool]$ui.EnableAdmin.IsChecked
-            Apps = @($ui.AppPanel.Children | ForEach-Object Tag)
+            Apps = @($ui.AppPanel.Children | ForEach-Object Tag); WifiName = $ui.WifiName.Text.Trim(); WifiPassword = $ui.WifiPassword.Password
         }
         Output = $ui.Output.Text; Split = [bool]$ui.Split.IsChecked; QuickCompress = [bool]$ui.QuickCompress.IsChecked; DefenderExclude = [bool]$ui.DefenderExclude.IsChecked; WorkDir = "$root\work"; CacheDir = "$root\cache"; ToolVersion = $toolVersion
     }
@@ -310,6 +310,7 @@ function Test-Config($c) {
     if ($u.Enabled) {
         if (-not $u.UserName.Trim()) { return 'Username is empty.', 'UserName' }
         if ($u.CustomScript -and -not (Test-Path $u.CustomScript)) { return 'Custom script not found.', 'CustomScript' }
+        if ($u.WifiName -and $u.WifiPassword -and $u.WifiPassword.Length -notin 8..63) { return 'Wi-Fi password must be 8 to 63 characters (or empty for an open network).', 'WifiPassword' }
         if ($u.ProductKey -and $u.ProductKey -notmatch '^([A-Z0-9]{5}-){4}[A-Z0-9]{5}$') { return 'Product key must look like XXXXX-XXXXX-XXXXX-XXXXX-XXXXX.', 'ProductKey' }
         if ($u.Edition -and -not $u.ProductKey -and -not $GenericKeys[$u.Edition]) { return "No generic key for $($u.Edition); turn off 'Skip edition choice' or enter a key.", 'Edition' }
         if ($u.AutoInstall -eq 'BestSsd' -and -not $u.Edition) { return "'Best SSD' needs 'Skip edition choice' with an edition selected.", 'SkipEdition' }

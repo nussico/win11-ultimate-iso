@@ -227,7 +227,8 @@ function Invoke-Build($Cfg, $Sync) {
         Enter-Step 6 'Unattended'
         if ($Cfg.Unattend.Enabled) {
             $dir = "$w\iso\sources\`$OEM`$\`$`$\Setup\Scripts"   # copied to C:\Windows\Setup\Scripts
-            if ($Cfg.Unattend.CustomScript -or $Cfg.Unattend.Apps) { New-Item -ItemType Directory -Force $dir | Out-Null }
+            if ($Cfg.Unattend.CustomScript -or $Cfg.Unattend.Apps -or $Cfg.Unattend.WifiName) { New-Item -ItemType Directory -Force $dir | Out-Null }
+            if ($Cfg.Unattend.WifiName) { [IO.File]::WriteAllText("$dir\wifi.xml", (New-WifiProfile $Cfg.Unattend.WifiName $Cfg.Unattend.WifiPassword)); Write-Log "Wi-Fi: $($Cfg.Unattend.WifiName) (password in plain text on the ISO)" }
             if ($Cfg.Unattend.CustomScript) { Copy-Item $Cfg.Unattend.CustomScript "$dir\custom.ps1" }
             if ($Cfg.Unattend.Apps) { Set-Content "$dir\apps.ps1" (New-AppsScript $Cfg.Unattend.Apps); Write-Log "Apps: $($Cfg.Unattend.Apps -join ', ')" }
             [IO.File]::WriteAllText("$w\iso\autounattend.xml", (New-UnattendXml $Cfg.Unattend))
@@ -286,7 +287,7 @@ function Invoke-Build($Cfg, $Sync) {
         $ErrorActionPreference = 'Stop'
 
         Enter-Step 9 'Finish'
-        $saved = $Cfg.Clone(); $saved.Unattend = $Cfg.Unattend.Clone(); $saved.Unattend.Password = ''; $saved.Unattend.ProductKey = ''   # never write secrets to disk
+        $saved = $Cfg.Clone(); $saved.Unattend = $Cfg.Unattend.Clone(); $saved.Unattend.Password = ''; $saved.Unattend.ProductKey = ''; $saved.Unattend.WifiPassword = ''   # never write secrets to disk
         $saved | ConvertTo-Json -Depth 5 | Set-Content (Join-Path (Split-Path $Cfg.Output) 'config.json')
         Remove-ImagePath $w
         Write-Log "DONE: $($Cfg.Output) ($([math]::Round((Get-Item $Cfg.Output).Length/1GB,1)) GB)"

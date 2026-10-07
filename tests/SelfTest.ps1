@@ -49,6 +49,12 @@ Assert ($s -match 'International-Core-WinPE' -and $s -match '<SetupUILanguage><U
 Assert ($s -notmatch 'apps\.ps1') 'No apps -> no apps script'
 $u.Apps = @('Discord.Discord'); $s = ([xml](New-UnattendXml $u)).OuterXml; $u.Apps = $null
 Assert ($s -match 'apps\.ps1' -and $s.IndexOf('apps.ps1') -lt $s.IndexOf('christitus')) 'Apps installed at first login, before WinUtil'
+Assert ($s -notmatch 'wifi\.xml') 'No Wi-Fi -> no Wi-Fi command'
+$u.Apps = @('Discord.Discord'); $u.WifiName = 'Home'; $s = ([xml](New-UnattendXml $u)).OuterXml; $u.Apps = $null; $u.WifiName = $null
+Assert ($s -match 'wlan add profile' -and $s.IndexOf('wifi.xml') -lt $s.IndexOf('apps.ps1') -and $s -match 'del C:\\Windows\\Setup\\Scripts\\wifi.xml') 'Wi-Fi joined before the apps, profile file deleted'
+$w = [xml](New-WifiProfile 'Caf<e> & "Net"' 'p&ss<word>1')
+Assert ($w.WLANProfile.name -eq 'Caf<e> & "Net"' -and $w.WLANProfile.MSM.security.sharedKey.keyMaterial -eq 'p&ss<word>1' -and $w.WLANProfile.connectionMode -eq 'auto') 'Wi-Fi profile: valid XML, name/password escaped, auto-connect'
+Assert (([xml](New-WifiProfile 'Open' '')).WLANProfile.MSM.security.authEncryption.authentication -eq 'open') 'Wi-Fi profile: no password -> open network'
 $found = @(ConvertFrom-WingetSearch @('   - ', 'Name            Id                            Version          Match                Source',
     '------------------------------------------------------------------------------------------',
     'Discord         Discord.Discord               1.0.9261         ProductCode: discord winget',
@@ -133,9 +139,9 @@ Assert ($q.Body -match 'updates=1' -and $q.Edition -eq 'CORE;PROFESSIONAL' -and 
 
 # Preset file: choices only, never secrets or paths
 $pd = Get-PresetData @{ BaseLang = 'de-de'; Editions = @('Windows 11 Pro'); Patches = @('hwchecks'); IsoFolder = 'D:\isos'; Output = 'D:\out\x.iso'
-    Unattend = @{ Enabled = $true; UserName = 'Max'; Password = 'secret1'; ProductKey = 'AAAAA-BBBBB-CCCCC-DDDDD-EEEEE'; CustomScript = 'D:\my.ps1'; Apps = @('Valve.Steam') } }
+    Unattend = @{ Enabled = $true; UserName = 'Max'; Password = 'secret1'; ProductKey = 'AAAAA-BBBBB-CCCCC-DDDDD-EEEEE'; CustomScript = 'D:\my.ps1'; Apps = @('Valve.Steam'); WifiName = 'HomeNet'; WifiPassword = 'wifisecret' } }
 $pj = $pd | ConvertTo-Json -Depth 4
-Assert ($pj -match 'Max' -and $pj -match 'Valve.Steam' -and $pj -match 'hwchecks' -and $pj -notmatch 'secret1|AAAAA|D:\\\\') 'Preset file: choices kept, no secrets or paths'
+Assert ($pj -match 'Max' -and $pj -match 'Valve.Steam' -and $pj -match 'hwchecks' -and $pj -match 'HomeNet' -and $pj -notmatch 'secret1|AAAAA|wifisecret|D:\\\\') 'Preset file: choices kept, no secrets or paths'
 
 # ISO version stamp (Build.ps1 loaded in a child scope so its Write-Log stays out of the way)
 & {

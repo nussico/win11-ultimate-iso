@@ -24,6 +24,19 @@ function ConvertFrom-WingetSearch([string[]]$Lines) {
 }
 $WingetIdPattern = '^[A-Za-z0-9][\w.+-]*$'
 
+# Wi-Fi profile for "netsh wlan add profile": WPA2/WPA3-personal with a password, open network without one.
+# The password is in plain text (the GUI warns); the first-logon command deletes the file after importing it.
+function New-WifiProfile($Name, $Password) {
+    $esc = [Security.SecurityElement]::Escape($Name)
+    $sec = if ($Password) {
+        '<authEncryption><authentication>WPA2PSK</authentication><encryption>AES</encryption><useOneX>false</useOneX></authEncryption>' +
+        "<sharedKey><keyType>passPhrase</keyType><protected>false</protected><keyMaterial>$([Security.SecurityElement]::Escape($Password))</keyMaterial></sharedKey>"
+    } else { '<authEncryption><authentication>open</authentication><encryption>none</encryption><useOneX>false</useOneX></authEncryption>' }
+    '<?xml version="1.0"?><WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">' +
+    "<name>$esc</name><SSIDConfig><SSID><name>$esc</name></SSID></SSIDConfig><connectionType>ESS</connectionType><connectionMode>auto</connectionMode>" +
+    "<MSM><security>$sec</security></MSM></WLANProfile>"
+}
+
 # First-logon script for the chosen apps. App Installer (winget) registers a little after the first login
 # and needs internet, so wait for both; the log lands in C:\Users\Public\Documents.
 function New-AppsScript([string[]]$Ids) {
@@ -108,6 +121,8 @@ function New-UnattendXml($u) {
         "<Password><Value>$(ConvertTo-UnattendPassword $u.Password 'Password')</Value><PlainText>false</PlainText></Password></AutoLogon>"
     }
     $cmds = @()
+    # Wi-Fi first so the apps have internet; the file holds the password in plain text, so delete it right away.
+    if ($u.WifiName) { $cmds += 'cmd /c netsh wlan add profile filename=C:\Windows\Setup\Scripts\wifi.xml user=all & del C:\Windows\Setup\Scripts\wifi.xml' }
     if ($u.EnableAdmin) { $cmds += 'net user Administrator /active:yes' }
     if ($u.Apps) { $cmds += 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Setup\Scripts\apps.ps1' }
     if ($u.CustomScript) { $cmds += 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Setup\Scripts\custom.ps1' }

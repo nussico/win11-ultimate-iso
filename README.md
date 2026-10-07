@@ -42,6 +42,7 @@ Manual: download the repo ZIP, extract, right-click `Builder.ps1` -> *Run with P
   - Aggressive: remove Edge (keeps WebView2), disable Defender, disable Recall
   - Extras: inject drivers, CTT WinUtil shortcut
 - **Unattended**: local account (default `User`), timezone, keyboard, skip OOBE, product key, run WinUtil or your own script after first login.
+- **Wi-Fi**: network name + password; Windows joins it after the first login, so apps install without a cable. The password is in plain text on the ISO (never in config.json or preset files), and the file is deleted from the PC after it is imported.
 - **Apps**: search winget in the builder and add apps (Steam, Discord, Firefox...); they install automatically after the first login.
 - **Version stamp**: every ISO is named `W11U_<version>` (shown in Explorer and on the USB stick) and has a `Win11Ultimate.txt` saying which builder version made it and with which editions and patches, plus `Win11Ultimate-preset.json` you can *Load* to build it again.
 - **Image cache**: the finished Windows image is kept, so a rebuild with the same source ISO, editions and patches (e.g. only Unattended or apps changed) skips mounting, patching and compressing and takes a few minutes. *Clean up* deletes it.

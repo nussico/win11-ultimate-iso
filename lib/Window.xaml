@@ -311,6 +311,14 @@
             <StackPanel Style="{StaticResource Row}" Margin="0"><TextBlock Text="Locale / format" Style="{StaticResource Label}"/><ComboBox x:Name="Locale" Width="160"/></StackPanel>
           </StackPanel></Border>
           <Border Style="{StaticResource Card}"><StackPanel>
+            <TextBlock Text="WI-FI" Style="{StaticResource Section}"/>
+            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Network name" Style="{StaticResource Label}"/><TextBox x:Name="WifiName" Width="220"/>
+              <TextBlock Text="empty = no Wi-Fi" Style="{StaticResource Hint}" Margin="12,0,0,0" VerticalAlignment="Center"/></StackPanel>
+            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Wi-Fi password" Style="{StaticResource Label}"/><PasswordBox x:Name="WifiPassword" Width="220"/>
+              <TextBlock Text="empty = open network" Style="{StaticResource Hint}" Margin="12,0,0,0" VerticalAlignment="Center"/></StackPanel>
+            <TextBlock Style="{StaticResource Hint}" Foreground="{StaticResource Danger}" Text="Connects after the first login, so the apps can install without a cable. The Wi-Fi password is stored in PLAIN TEXT on the ISO / USB stick: anyone who has the stick can read it. It is not saved in config.json or preset files."/>
+          </StackPanel></Border>
+          <Border Style="{StaticResource Card}"><StackPanel>
             <TextBlock Text="APPS" Style="{StaticResource Section}"/>
             <DockPanel><TextBlock Text="Search winget" Style="{StaticResource Label}"/><Button x:Name="SearchApps" DockPanel.Dock="Right" Content="Search"/><TextBox x:Name="AppSearch"/></DockPanel>
             <WrapPanel x:Name="AppResults" Margin="0,8,0,0"/>

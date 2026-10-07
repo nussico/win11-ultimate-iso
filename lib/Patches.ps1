@@ -230,7 +230,7 @@ function Get-PresetData($Cfg) {
     $p = [ordered]@{}
     foreach ($k in 'BaseLang', 'Editions', 'Patches', 'UseUup', 'Newest', 'Fast', 'Split', 'QuickCompress', 'DefenderExclude') { $p[$k] = $Cfg[$k] }
     $u = [ordered]@{}
-    foreach ($k in 'Enabled', 'UserName', 'AutoLogon', 'Admin', 'ComputerName', 'TimeZone', 'Keyboard', 'Locale', 'SkipOobe', 'Edition', 'AutoInstall', 'RunWinUtil', 'EnableAdmin', 'Apps') { $u[$k] = $Cfg.Unattend[$k] }
+    foreach ($k in 'Enabled', 'UserName', 'AutoLogon', 'Admin', 'ComputerName', 'TimeZone', 'Keyboard', 'Locale', 'SkipOobe', 'Edition', 'AutoInstall', 'RunWinUtil', 'EnableAdmin', 'Apps', 'WifiName') { $u[$k] = $Cfg.Unattend[$k] }
     $p.Unattend = $u; $p
 }
 
