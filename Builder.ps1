@@ -195,7 +195,7 @@ function Search-Apps {
     $q = $ui.AppSearch.Text.Trim(); if (-not $q) { return }
     $ui.AppResults.Children.Clear()
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { $ui.AppsHint.Text = 'winget is not installed on this PC, so search does not work here.'; return }
-    $win.Cursor = 'Wait'; $win.Dispatcher.Invoke([action] {}, 'Render')
+    $win.Cursor = 'Wait'; $win.Dispatcher.Invoke([Windows.Threading.DispatcherPriority]::Render, [action] {})
     $enc = [Console]::OutputEncoding; [Console]::OutputEncoding = [Text.Encoding]::UTF8
     try { $found = @(ConvertFrom-WingetSearch @(winget search $q --source winget --count 15 --accept-source-agreements --disable-interactivity 2>$null)) }
     finally { [Console]::OutputEncoding = $enc; $win.Cursor = $null }
@@ -280,7 +280,7 @@ $ui.LoadLast.Add_Click({ if (Test-Path $lastPreset) { Import-PresetPath $lastPre
 
 function Invoke-Scan {
     $win.Cursor = 'Wait'; $ui.ScanResult.Text = 'Scanning...'
-    $win.Dispatcher.Invoke([action] {}, 'Render')
+    $win.Dispatcher.Invoke([Windows.Threading.DispatcherPriority]::Render, [action] {})
     $script:IsoInfos = @(Get-SourceIsos $ui.IsoFolder.Text)
     $win.Cursor = $null
     $ui.ScanResult.Text = if ($script:IsoInfos) {
@@ -341,7 +341,8 @@ function Show-Field($Name) {
         if (-not $card -and $p -is [Windows.Controls.Border] -and $p.Style -eq $win.FindResource('Card')) { $card = $p }
         if ($p.Name -like 'Page*') { $ui.Nav.SelectedItem = @($ui.Nav.Items | Where-Object Tag -eq $p.Name)[0] }
     }
-    $win.Dispatcher.BeginInvoke([action] { $el.BringIntoView(); $el.Focus() | Out-Null }.GetNewClosure(), 'Loaded') | Out-Null
+    # Priority first: with (action, 'Loaded') PowerShell picks BeginInvoke(Delegate, params object[]) -> "Parameter count mismatch".
+    $win.Dispatcher.BeginInvoke([Windows.Threading.DispatcherPriority]::Loaded, [action] { $el.BringIntoView(); $el.Focus() | Out-Null }.GetNewClosure()) | Out-Null
     if ($card) {
         $old = $card.BorderBrush; $card.BorderBrush = $win.FindResource('Danger')
         $t = New-Object Windows.Threading.DispatcherTimer -Property @{ Interval = [TimeSpan]::FromSeconds(3) }
