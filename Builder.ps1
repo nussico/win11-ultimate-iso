@@ -63,9 +63,14 @@ try {
     $langs = Get-UupLanguages (Select-NewestUupBuild $script:UupBuilds).uuid
 } catch { }
 $script:IsoInfos = @()
-$buildList = @($script:UupBuilds | Where-Object title -like 'Windows 11, version*' | Sort-Object { [version]"10.0.$($_.build)" } -Descending | Select-Object -First 15)
+# The 5 newest updates of every version, general (H2) releases first; H1 ships only on new hardware.
+$buildList = @($script:UupBuilds | Where-Object title -like 'Windows 11, version*' |
+    Sort-Object @{ e = { $_.title -match ' \d\dH2 ' }; Descending = $true }, @{ e = { [version]"10.0.$($_.build)" }; Descending = $true } |
+    Group-Object { $_.title -replace '^Windows 11, version (\S+).*', '$1' } |
+    Sort-Object @{ e = { $_.Name -like '*H2' }; Descending = $true }, @{ e = { [version]"10.0.$($_.Group[0].build)" }; Descending = $true } |
+    ForEach-Object { $_.Group | Select-Object -First 5 })
 $ui.Build.Items.Add('Auto - newest build matching your ISO') | Out-Null
-foreach ($b in $buildList) { $ui.Build.Items.Add($b.title) | Out-Null }
+foreach ($b in $buildList) { $ui.Build.Items.Add($b.title + $(if ($b.title -match ' \d\dH1 ') { '  - new PCs only' })) | Out-Null }
 $ui.Build.SelectedIndex = 0
 
 # --- Updates: install.ps1 writes the installed commit to version.txt ---
