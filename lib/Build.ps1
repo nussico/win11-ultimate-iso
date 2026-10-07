@@ -273,7 +273,8 @@ function Invoke-Build($Cfg, $Sync) {
         # Mark the ISO with the builder version: volume label (shown in Explorer / on a Rufus stick) + info file.
         $label = Get-IsoLabel $Cfg.ToolVersion
         Set-Content "$w\iso\Win11Ultimate.txt" (Get-IsoInfoText $Cfg)
-        Write-Log "ISO label $label, Win11Ultimate.txt added"
+        Get-PresetData $Cfg | ConvertTo-Json -Depth 4 | Set-Content "$w\iso\Win11Ultimate-preset.json"   # Load it in the builder to rebuild this ISO
+        Write-Log "ISO label $label, Win11Ultimate.txt + preset added"
         $boot = "2#p0,e,b$w\iso\boot\etfsboot.com#pEF,e,b$w\iso\efi\microsoft\boot\efisys.bin"
         $ErrorActionPreference = 'Continue'   # oscdimg writes progress to stderr
         Write-Log "Writing $($Cfg.Output) - takes 1-3 minutes"
