@@ -192,7 +192,7 @@ function Search-Apps {
     if (-not $found) { $ui.AppResults.Children.Add((New-Object Windows.Controls.TextBlock -Property @{ Text = "Nothing found for '$q'." })) | Out-Null }
     foreach ($f in $found) {
         $c = New-Check "+ $($f.Name)  ($($f.Id))" 'Chip'; $c.Tag = $f
-        $c.Add_Checked({ Add-App $this.Tag.Name $this.Tag.Id; $ui.AppResults.Children.Remove($this) })
+        $c.Add_Checked({ Add-App $this.Tag.Name $this.Tag.Id; $ui.AppResults.Children.Clear(); $ui.AppSearch.Clear(); $ui.AppSearch.Focus() })
         $ui.AppResults.Children.Add($c) | Out-Null
     }
 }

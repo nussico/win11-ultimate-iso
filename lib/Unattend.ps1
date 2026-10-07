@@ -30,15 +30,20 @@ function New-AppsScript([string[]]$Ids) {
     $list = ($Ids | Where-Object { $_ -match $WingetIdPattern } | ForEach-Object { "'$_'" }) -join ', '
     @'
 $log = "$env:PUBLIC\Documents\Win11Ultimate-apps.log"
+"$(Get-Date) started" | Add-Content $log
 Write-Host 'Installing apps with winget, please wait...'
 for ($i = 0; $i -lt 60 -and -not ((Get-Command winget -ErrorAction SilentlyContinue) -and [Net.NetworkInformation.NetworkInterface]::GetIsNetworkAvailable()); $i++) {
     try { Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe -ErrorAction Stop } catch { }
     Start-Sleep 5
 }
+"$(Get-Date) winget $(if (Get-Command winget -ErrorAction SilentlyContinue) { 'ready' } else { 'NOT FOUND' }), network $([Net.NetworkInformation.NetworkInterface]::GetIsNetworkAvailable())" | Add-Content $log
 foreach ($id in @(__IDS__)) {
     Write-Host "Installing $id"; "== $id" | Add-Content $log
-    winget install --id $id -e --silent --accept-package-agreements --accept-source-agreements --disable-interactivity 2>&1 | Add-Content $log
+    # --source winget: the msstore source fails on a fresh install (certificate error) and then winget installs nothing.
+    winget install --id $id -e --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity 2>&1 | Add-Content $log
+    "exit code $LASTEXITCODE" | Add-Content $log
 }
+"$(Get-Date) done" | Add-Content $log
 '@.Replace('__IDS__', $list)
 }
 

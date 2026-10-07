@@ -58,6 +58,7 @@ Assert (-not (ConvertFrom-WingetSearch @('No package found matching input criter
 $as = New-AppsScript @('Valve.Steam', "x'; Remove-Item C:\ -Recurse #")
 $e = $null; [Management.Automation.Language.Parser]::ParseInput($as, [ref]$null, [ref]$e) | Out-Null
 Assert ($as -match "'Valve.Steam'" -and $as -notmatch 'Remove-Item' -and -not $e) 'Apps script: valid PowerShell, bad IDs dropped'
+Assert ($as -match 'winget install [^\r\n]*--source winget') 'Apps script installs from the winget source only (msstore fails on a fresh install)'
 $u.AutoInstall = 'Disk0'; $u.SkipOobe = $false; $u.Edition = ''; $u.Password = ''
 $s = ([xml](New-UnattendXml $u)).OuterXml
 Assert ($s -match 'WillWipeDisk' -and $s -notmatch 'HideOnlineAccountScreens' -and $s -notmatch 'ProductKey') 'Disk0 wipe, OOBE shown, no key'
