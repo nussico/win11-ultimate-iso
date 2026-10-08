@@ -372,7 +372,8 @@
           <Grid.ColumnDefinitions><ColumnDefinition Width="3*"/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
           <Border Style="{StaticResource Card}" Margin="0,0,14,14"><StackPanel>
             <TextBlock Text="PLAN" Style="{StaticResource Section}"/>
-            <TextBlock x:Name="PlanText" LineHeight="20"/>
+            <!-- Filled by Update-Plan: notices, time + disk, then one row per decision -->
+            <StackPanel x:Name="PlanPanel"/>
           </StackPanel></Border>
           <Border Grid.Column="1" Style="{StaticResource Card}"><StackPanel>
             <TextBlock Text="OUTPUT" Style="{StaticResource Section}"/>

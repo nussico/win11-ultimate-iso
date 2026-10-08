@@ -463,23 +463,40 @@ function Save-Timing($Key, [double]$Minutes) {
 }
 
 # --- Plan (same decision logic as the build) ---
+# Plan card pieces: a coloured notice, a big number with a caption, and a label/value row.
+function Add-PlanNotice($Text, $Color) {
+    $tb = New-Object Windows.Controls.TextBlock -Property @{ Text = $Text; TextWrapping = 'Wrap'; Foreground = $Color }
+    $ui.PlanPanel.Children.Add((New-Object Windows.Controls.Border -Property @{
+                Child = $tb; BorderBrush = $Color; BorderThickness = '3,0,0,0'; Padding = '10,6'; Margin = '0,0,0,10'; Background = $brush.Dark })) | Out-Null
+}
+function New-PlanStat($Value, $Caption, $Color) {
+    $sp = New-Object Windows.Controls.StackPanel -Property @{ Margin = '0,0,32,0' }
+    $sp.Children.Add((New-Object Windows.Controls.TextBlock -Property @{ Text = $Value; FontSize = 22; FontWeight = 'SemiBold'; Foreground = $Color })) | Out-Null
+    $sp.Children.Add((New-Object Windows.Controls.TextBlock -Property @{ Text = $Caption; FontSize = 12; Foreground = $brush.Muted })) | Out-Null
+    $sp
+}
+function Add-PlanRow($Label, $Value, $Hint) {
+    $row = New-Object Windows.Controls.DockPanel -Property @{ Margin = '0,0,0,7' }
+    $l = New-Object Windows.Controls.TextBlock -Property @{ Text = $Label; Width = 90; Foreground = $brush.Muted }
+    [Windows.Controls.DockPanel]::SetDock($l, 'Left'); $row.Children.Add($l) | Out-Null
+    $v = New-Object Windows.Controls.TextBlock -Property @{ TextWrapping = 'Wrap'; Foreground = $brush.Text }
+    $v.Inlines.Add((New-Object Windows.Documents.Run $Value)) | Out-Null
+    if ($Hint) { $v.Inlines.Add((New-Object Windows.Documents.Run "  $Hint" -Property @{ Foreground = $brush.Muted; FontSize = 12 })) | Out-Null }
+    $row.Children.Add($v) | Out-Null
+    $ui.PlanPanel.Children.Add($row) | Out-Null
+}
+
 function Update-Plan {
+    $ui.PlanPanel.Children.Clear()
     try {
         $cfg = Get-Config
-        if (-not $cfg.Editions) { $ui.PlanText.Text = 'Pick at least one edition on the Source page.'; return }
+        if (-not $cfg.Editions) { Add-PlanNotice 'Pick at least one edition on the Source page.' $brush.Warn; return }
         $p = Get-BuildPlan $script:IsoInfos $script:UupBuilds $cfg
-        $lines = @()
-        if ($script:scanning) { $lines += 'Still scanning your ISOs - this plan updates when done.' }
-        if ($script:uupLoading -and $cfg.UseUup) { $lines += 'Still loading the build list from UUP dump - this plan updates when done.' }
-        if ($p.Error) { $lines += "PROBLEM: $($p.Error)" }
-        if ($p.Note) { $lines += $p.Note }
-        if ($p.Base) { $lines += "Source: your ISO $(Split-Path $p.Base.Path -Leaf) (build $($p.Base.Build))" }
-        if ($p.Missing -and $p.Uup) {
-            $lines += "Download: $($p.Missing -join ', ') from UUP dump, $($p.Uup.title), " +
-                $(if ($cfg.Fast) { 'fast mode (about 15 min, older base build)' } else { 'with the latest update (about 60 min)' })
-        }
-        $lines += "Editions: $($cfg.Editions -join ', ')  ($($cfg.BaseLang))"
-        $lines += "Patches: $($cfg.Patches.Count) selected$(if ($cfg.Unattend.Enabled) { ', unattended setup' })"
+        if ($p.Error) { Add-PlanNotice "Can't build yet: $($p.Error)" $brush.Danger }
+        if ($p.Note) { Add-PlanNotice ($p.Note -replace '^NOTE: ', '') $brush.Warn }
+        if ($script:scanning) { Add-PlanNotice 'Still scanning your ISOs - the plan updates when done.' $brush.Muted }
+        if ($script:uupLoading -and $cfg.UseUup) { Add-PlanNotice 'Still loading the Windows versions from UUP dump - the plan updates when done.' $brush.Muted }
+
         # Same cache check as the build. Image time (steps 3-9) is measured on this PC after each build.
         $cachePath = if ($p.Base -and -not $p.Missing) { Get-ImageCachePath $cfg @($cfg.Editions | ForEach-Object { @{ Iso = $p.Base.Path; Name = $_ } }) }
         $cached = $cachePath -and (Test-Path $cachePath)
@@ -488,12 +505,25 @@ function Update-Plan {
         $min = 1 + [math]::Ceiling($t.($script:planKey) * $(if ($cached) { 1 } else { $script:planEds }))
         $min += $(if ($p.Missing) { if ($cfg.Fast) { 15 } else { 60 } } else { 0 })
         $script:planMinutes = $min
-        $lines += "Time: about $min minutes$(if ($cached) { ' (reusing the finished image from the last build)' })" +
-            $(if ($t.Measured -contains $script:planKey) { ', measured on this PC' } else { ', estimate until the first build on this PC' })
         $need = Get-NeededGB $cached; $free = [math]::Round((Get-PSDrive $root.Substring(0, 1)).Free / 1GB)
-        $lines += "Disk: needs $need GB free on $($root.Substring(0, 2)), you have $free GB$(if ($free -lt $need) { '  - NOT ENOUGH' })"
-        $ui.PlanText.Text = $lines -join "`n"
-    } catch { $ui.PlanText.Text = "Plan not available: $_" }
+
+        $stats = New-Object Windows.Controls.StackPanel -Property @{ Orientation = 'Horizontal'; Margin = '0,2,0,14' }
+        $how = 'build time, ' + $(if ($cached) { 'reuses your last build' } elseif ($t.Measured -contains $script:planKey) { 'measured on this PC' } else { 'estimate' })
+        $stats.Children.Add((New-PlanStat "~$min min" $how $brush.Text)) | Out-Null
+        $stats.Children.Add((New-PlanStat "$need GB" "disk space on $($root.Substring(0, 2)), $free GB free" $(if ($free -lt $need) { $brush.Danger } else { $brush.Text }))) | Out-Null
+        $ui.PlanPanel.Children.Add($stats) | Out-Null
+        if ($free -lt $need) { Add-PlanNotice "Not enough disk space: free up $($need - $free) GB on $($root.Substring(0, 2))." $brush.Danger }
+
+        if ($p.Base) { Add-PlanRow 'Windows' "Your ISO, build $($p.Base.Build)" (Split-Path $p.Base.Path -Leaf) }
+        if ($p.Missing -and $p.Uup) {
+            Add-PlanRow 'Windows' "$($p.Uup.title)" $(if ($cfg.Fast) { 'download, fast mode: base build, updates after setup' } else { 'download incl. the latest update' })
+        }
+        Add-PlanRow 'Editions' ($cfg.Editions -join ', ')
+        Add-PlanRow 'Language' $cfg.BaseLang
+        Add-PlanRow 'Patches' "$($cfg.Patches.Count) selected"
+        $setup = if (-not $cfg.Unattend.Enabled) { 'Normal Windows setup' } elseif ($cfg.Unattend.AutoInstall -eq 'BestSsd') { 'Installs by itself onto the best SSD' } else { 'Unattended: account and settings preset' }
+        Add-PlanRow 'Setup' $setup
+    } catch { Add-PlanNotice "Plan not available: $_" $brush.Danger }
 }
 
 # --- Storage ---
