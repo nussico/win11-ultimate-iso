@@ -9,3 +9,7 @@ vm/
 # your remembered GUI choices
 last-preset.json
 timing.json
+
+# your own presets (the folder ships empty)
+presets/*
+!presets/.gitkeep

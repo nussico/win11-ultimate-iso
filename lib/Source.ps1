@@ -72,7 +72,7 @@ function Get-BuildPlan($Isos, $Builds, $Cfg) {
 }
 
 function Get-UupBuilds {
-    $b = (Invoke-RestMethod "$UupApi/listid.php?search=Windows%2011%2C%20version&sortByDate=1").response.builds
+    $b = (Invoke-RestMethod "$UupApi/listid.php?search=Windows%2011%2C%20version&sortByDate=1" -TimeoutSec 20).response.builds
     @($b.PSObject.Properties.Value | Where-Object arch -eq 'amd64')
 }
 
@@ -90,7 +90,7 @@ function Select-NewestUupBuild($Builds) {
 }
 
 function Get-UupLanguages($Uuid) {
-    @((Invoke-RestMethod "$UupApi/listlangs.php?id=$Uuid").response.langList | Where-Object { $_ -ne 'neutral' } | Sort-Object)
+    @((Invoke-RestMethod "$UupApi/listlangs.php?id=$Uuid" -TimeoutSec 20).response.langList | Where-Object { $_ -ne 'neutral' } | Sort-Object)
 }
 
 # UUP dump package request. Fast = skip integrating the latest cumulative update (Windows Update installs it later).

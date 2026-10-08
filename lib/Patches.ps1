@@ -262,8 +262,12 @@ function Remove-ImagePath($Path) {
     $ErrorActionPreference = 'Continue'   # native tools below write to stderr
     if (-not (Test-Path $Path)) { return }
     # takeown /r only accepts folders; on a file it fails and the delete is then denied.
-    $own = if (Test-Path $Path -PathType Container) { @('/r', '/d', 'y') } else { @() }
-    $out = takeown /f $Path @own /a 2>&1
+    # The /d answer is localized (y, German j, French o, Spanish/Italian s): retry while it is rejected as a bad value.
+    foreach ($yes in 'y', 'j', 'o', 's') {
+        $own = if (Test-Path $Path -PathType Container) { @('/r', '/d', $yes) } else { @() }
+        $out = takeown /f $Path @own /a 2>&1
+        if (-not $LASTEXITCODE -or -not $own -or "$out" -notmatch "'$yes'") { break }
+    }
     if ($LASTEXITCODE) { Write-Log "  WARN takeown failed for ${Path}: $out" }
     icacls $Path /grant '*S-1-5-32-544:F' /t /c /q 2>&1 | Out-Null
     # Leftover files are not worth failing a whole build over: warn and continue.

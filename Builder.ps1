@@ -1,3 +1,10 @@
+<#
+                           _
+ _ __   _   _  ___   ___  (_)   ___    ___
+| '_ \ | | | |/ __| / __| | |  / __|  / _ \
+| | | || |_| |\__ \ \__ \ | | | (__  | (_) |
+|_| |_| \__,_||___/ |___/ |_|  \___|  \___/
+#>
 # Win11 Ultimate ISO Builder - GUI entry point (WPF).
 # Always runs in elevated Windows PowerShell 5.1 (STA, needed by WPF).
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -10,6 +17,15 @@ if (-not $isAdmin -or $PSVersionTable.PSEdition -ne 'Desktop') {
 Add-Type -AssemblyName PresentationFramework, System.Windows.Forms
 # There is no console window, so show startup errors instead of failing silently.
 trap { [Windows.MessageBox]::Show("The builder could not start:`n`n$_`n`n$($_.InvocationInfo.PositionMessage)", 'Win11 Ultimate', 'OK', 'Error') | Out-Null; exit 1 }
+
+# One builder at a time: starting it again brings the open window to the front instead.
+$instance = New-Object Threading.Mutex($false, 'Local\Win11UltimateBuilder')
+$owned = try { $instance.WaitOne(0) } catch [Threading.AbandonedMutexException] { $true }   # abandoned = last builder crashed
+if (-not $owned) {
+    Add-Type -AssemblyName Microsoft.VisualBasic
+    try { [Microsoft.VisualBasic.Interaction]::AppActivate('Win11 Ultimate ISO Builder') } catch { }
+    exit
+}
 
 $root = $PSScriptRoot
 # Launcher shortcut in the install folder, rewritten on every start: a .lnk holds full paths, so after the folder
@@ -60,31 +76,66 @@ $ui.Nav.Add_SelectionChanged({
         if ($ui.Nav.SelectedItem.Tag -eq 'PageBuild') { Update-Plan }
     })
 
-# --- UUP data (best effort; offline still works with own ISOs) ---
-$script:UupBuilds = @()
-$langs = @('ar-sa', 'cs-cz', 'da-dk', 'de-de', 'en-gb', 'en-us', 'es-es', 'fr-fr', 'it-it', 'ja-jp', 'ko-kr', 'nl-nl', 'pl-pl', 'pt-br', 'ru-ru', 'sv-se', 'tr-tr', 'uk-ua', 'zh-cn')
-try {
-    $script:UupBuilds = Get-UupBuilds
-    $langs = Get-UupLanguages (Select-NewestUupBuild $script:UupBuilds).uuid
-} catch { }
+# --- Background work: network calls and ISO scans run off the UI thread, so the window opens at once ---
+# $Work runs in its own runspace with lib\Source.ps1 loaded, as param($root, $Arg); $Done gets its output (nothing on error)
+# back on the UI thread. $Work goes over as text: a script block from this runspace would run on this (busy) thread.
+$script:bgJobs = [Collections.ArrayList]@()
+$bgTimer = New-Object Windows.Threading.DispatcherTimer -Property @{ Interval = [TimeSpan]::FromMilliseconds(200) }
+$bgTimer.Add_Tick({
+        foreach ($j in @($script:bgJobs | Where-Object { $_.Handle.IsCompleted })) {
+            $script:bgJobs.Remove($j)
+            $out = try { @($j.PS.EndInvoke($j.Handle)) } catch { @() }
+            $j.PS.Runspace.Close(); $j.PS.Dispose()
+            & $j.Done $out
+        }
+        if (-not $script:bgJobs.Count) { $bgTimer.Stop() }
+    })
+function Start-Background([scriptblock]$Work, $Arg, [scriptblock]$Done) {
+    $ps = [powershell]::Create()
+    $ps.AddScript({ param($root, $work, $arg) . "$root\lib\Source.ps1"; & ([scriptblock]::Create($work)) $root $arg }).
+        AddArgument($root).AddArgument("$Work").AddArgument($Arg) | Out-Null
+    $script:bgJobs.Add(@{ PS = $ps; Handle = $ps.BeginInvoke(); Done = $Done }) | Out-Null
+    $bgTimer.Start()
+}
+
+# --- UUP data (best effort; offline still works with own ISOs). Until it arrives: Auto only, built-in languages. ---
+$script:UupBuilds = @(); $script:buildList = @(); $script:uupLoading = $true
+$script:langs = @('ar-sa', 'cs-cz', 'da-dk', 'de-de', 'en-gb', 'en-us', 'es-es', 'fr-fr', 'it-it', 'ja-jp', 'ko-kr', 'nl-nl', 'pl-pl', 'pt-br', 'ru-ru', 'sv-se', 'tr-tr', 'uk-ua', 'zh-cn')
 $script:IsoInfos = @()
-# The 5 newest updates of every version, general (H2) releases first; H1 ships only on new hardware.
-$buildList = @($script:UupBuilds | Where-Object title -like 'Windows 11, version*' |
-    Sort-Object @{ e = { $_.title -match ' \d\dH2 ' }; Descending = $true }, @{ e = { [version]"10.0.$($_.build)" }; Descending = $true } |
-    Group-Object { $_.title -replace '^Windows 11, version (\S+).*', '$1' } |
-    Sort-Object @{ e = { $_.Name -like '*H2' }; Descending = $true }, @{ e = { [version]"10.0.$($_.Group[0].build)" }; Descending = $true } |
-    ForEach-Object { $_.Group | Select-Object -First 5 })
 $ui.Build.Items.Add('Auto - newest build matching your ISO') | Out-Null
-foreach ($b in $buildList) { $ui.Build.Items.Add($b.title + $(if ($b.title -match ' \d\dH1 ') { '  - new PCs only' })) | Out-Null }
 $ui.Build.SelectedIndex = 0
+Start-Background {
+    $builds = Get-UupBuilds
+    [pscustomobject]@{ Builds = $builds; Langs = $(try { @(Get-UupLanguages (Select-NewestUupBuild $builds).uuid) } catch { @() }) }
+} $null {
+    param($out)
+    $script:uupLoading = $false
+    if ($r = $out | Select-Object -First 1) {
+        $script:UupBuilds = @($r.Builds)
+        if ($r.Langs) { Set-Languages $r.Langs }
+        # The 5 newest updates of every version, general (H2) releases first; H1 ships only on new hardware.
+        $script:buildList = @($script:UupBuilds | Where-Object title -like 'Windows 11, version*' |
+            Sort-Object @{ e = { $_.title -match ' \d\dH2 ' }; Descending = $true }, @{ e = { [version]"10.0.$($_.build)" }; Descending = $true } |
+            Group-Object { $_.title -replace '^Windows 11, version (\S+).*', '$1' } |
+            Sort-Object @{ e = { $_.Name -like '*H2' }; Descending = $true }, @{ e = { [version]"10.0.$($_.Group[0].build)" }; Descending = $true } |
+            ForEach-Object { $_.Group | Select-Object -First 5 })
+        foreach ($b in $script:buildList) { $ui.Build.Items.Add($b.title + $(if ($b.title -match ' \d\dH1 ') { '  - new PCs only' })) | Out-Null }
+    }
+    Update-BuildHint
+    if ($ui.Nav.SelectedItem.Tag -eq 'PageBuild') { Update-Plan }
+}
 
 # --- Updates: install.ps1 writes the installed commit to version.txt ---
 $repo = 'nussico/win11-ultimate-iso'
-try {
+Start-Background {
+    param($root, $repo)
     $have = (Get-Content "$root\version.txt" -ErrorAction Stop).Trim()
     $latest = Invoke-RestMethod "https://api.github.com/repos/$repo/commits/main" -Headers @{ Accept = 'application/vnd.github.sha' } -TimeoutSec 5
-    if ($latest -and $latest.Trim() -ne $have) { $ui.UpdateBtn.Visibility = 'Visible'; $ui.SubTitle.Visibility = 'Collapsed' }
-} catch { }   # manual install, offline or rate-limited: no button
+    [bool]($latest -and $latest.Trim() -ne $have)
+} $repo {
+    param($out)   # empty for a manual install, offline or rate-limited: no button
+    if ($out -and $out[0]) { $ui.UpdateBtn.Visibility = 'Visible'; $ui.SubTitle.Visibility = 'Collapsed' }
+}
 # --- Info page ---
 # Short commit from install.ps1, stamped on every ISO (label, Win11Ultimate.txt, log); 'dev' for a git checkout.
 $toolVersion = if (Test-Path "$root\version.txt") { (Get-Content "$root\version.txt" -Raw).Trim() -replace '^(.{7}).*', '$1' } else { 'dev' }
@@ -103,12 +154,21 @@ $ui.UpdateBtn.Add_Click({
 # --- Source / languages ---
 $ui.IsoFolder.Text = "$root\sources"
 $ui.BrowseIso.Add_Click({ Select-Folder $ui.IsoFolder })
-foreach ($l in $langs) { $ui.BaseLang.Items.Add($l) | Out-Null; $ui.Keyboard.Items.Add($l) | Out-Null; $ui.Locale.Items.Add($l) | Out-Null }
 # Defaults follow this PC: Windows display language, then region/keyboard; en-us when not in the list.
 function Get-DefaultLang($Tag) {
     $t = "$Tag".ToLower()
-    @($t; $langs -like "$($t.Split('-')[0])-*"; 'en-us'; $langs[0]) | Where-Object { $_ -in $langs } | Select-Object -First 1
+    @($t; $script:langs -like "$($t.Split('-')[0])-*"; 'en-us'; $script:langs[0]) | Where-Object { $_ -in $script:langs } | Select-Object -First 1
 }
+# Fills the language lists; choices already made stay (or move to the closest language in the new list).
+function Set-Languages($List) {
+    $script:langs = @($List)
+    foreach ($n in 'BaseLang', 'Keyboard', 'Locale') {
+        $was = $ui[$n].SelectedItem; $ui[$n].Items.Clear()
+        foreach ($l in $script:langs) { $ui[$n].Items.Add($l) | Out-Null }
+        if ($was) { $ui[$n].SelectedItem = Get-DefaultLang $was }
+    }
+}
+Set-Languages $script:langs
 $ui.BaseLang.SelectedItem = Get-DefaultLang (Get-UICulture).Name
 $region = Get-DefaultLang (Get-Culture).Name; $ui.Keyboard.SelectedItem = $region; $ui.Locale.SelectedItem = $region
 
@@ -139,6 +199,7 @@ function Update-Editions {
 # Spells out which build "Auto" resolves to (same logic as the build plan).
 function Update-BuildHint {
     if ($ui.Build.SelectedIndex -gt 0) { $ui.BuildHint.Text = 'Downloads exactly this build when editions are missing.'; return }
+    if ($script:uupLoading) { $ui.BuildHint.Text = 'Loading the build list from UUP dump...'; return }
     try {
         $p = Get-BuildPlan $script:IsoInfos $script:UupBuilds (Get-Config)
         $b = if ($p.Uup) { $p.Uup } elseif ($p.Base) { Select-UupBuild $script:UupBuilds $p.Base.Build } else { $p.Newest }
@@ -219,9 +280,28 @@ $ui.BrowseOut.Add_Click({
         $d = New-Object Windows.Forms.SaveFileDialog -Property @{ Filter = 'ISO (*.iso)|*.iso'; FileName = 'Win11.iso' }
         if ($d.ShowDialog() -eq 'OK') { $ui.Output.Text = $d.FileName } })
 
-# --- Presets ---
-foreach ($p in @($Presets.Keys) + 'Custom') { $ui.Preset.Items.Add($p) | Out-Null }
+# --- Presets: built-in ones, then every .json in the presets folder, then Custom ---
+$presetDir = "$root\presets"
+New-Item -ItemType Directory -Force $presetDir | Out-Null
 $script:applying = $false
+$script:filePresets = [ordered]@{}   # list name -> file
+# Rebuilt when the list opens, so files dropped into the folder show up. Keeps the selection without re-applying it.
+function Update-PresetList {
+    $script:applying = $true
+    $sel = $ui.Preset.SelectedItem
+    $script:filePresets = [ordered]@{}
+    foreach ($f in Get-ChildItem $presetDir -Filter *.json -File -ErrorAction SilentlyContinue | Sort-Object BaseName) {
+        $n = if ($f.BaseName -in @($Presets.Keys) + 'Custom') { "$($f.BaseName) (file)" } else { $f.BaseName }
+        $script:filePresets[$n] = $f.FullName
+    }
+    $ui.Preset.Items.Clear()
+    foreach ($p in @($Presets.Keys) + @($script:filePresets.Keys) + 'Custom') { $ui.Preset.Items.Add($p) | Out-Null }
+    $ui.Preset.SelectedItem = if ("$sel" -in @($ui.Preset.Items)) { $sel } else { 'Custom' }
+    $script:applying = $false
+}
+# List name of a preset file, if it is in the presets folder.
+function Get-PresetName($Path) { @($script:filePresets.Keys | Where-Object { $script:filePresets[$_] -eq $Path })[0] }
+Update-PresetList
 function Set-Preset($Name) {
     if (-not $Presets.Contains($Name)) { return }
     $script:applying = $true
@@ -239,13 +319,18 @@ function Update-Summary {
     $ui.Summary.Text = "$ed editions, $($ui.BaseLang.SelectedItem), $pa patches" + $(if ($ui.UnattendOn.IsChecked) { ', unattended' } else { '' })
     if ($win.IsLoaded) { Update-TopBar }
 }
-$ui.Preset.Add_SelectionChanged({ Set-Preset $ui.Preset.SelectedItem })
+$ui.Preset.Add_SelectionChanged({
+        if ($script:applying) { return }
+        $n = "$($ui.Preset.SelectedItem)"
+        if ($script:filePresets.Contains($n)) { Import-PresetPath $script:filePresets[$n] $n } else { Set-Preset $n }
+    })
+$ui.Preset.Add_DropDownOpened({ Update-PresetList })
 foreach ($c in @($patchChecks.Values) + $ui.SkipOobe + $ui.RunWinUtil) {
     $c.Add_Click({ if (-not $script:applying) { $ui.Preset.SelectedItem = 'Custom' }; Update-Summary })
 }
 
 # Preset files: Save writes Get-PresetData as JSON, Load puts the values back into the controls.
-function Import-PresetFile($p) {
+function Import-PresetFile($p, $Name) {
     $set = { param($name, $v) if ($null -eq $v) { return }; $c = $ui[$name]
         if ($c -is [Windows.Controls.Primitives.ToggleButton]) { $c.IsChecked = [bool]$v }
         elseif ($c -is [Windows.Controls.ComboBox]) { if ("$v" -in @($c.Items)) { $c.SelectedItem = "$v" } }
@@ -262,34 +347,49 @@ function Import-PresetFile($p) {
         $ai = @($ui.AutoInstall.Items | Where-Object Tag -eq $u.AutoInstall); if ($ai) { $ui.AutoInstall.SelectedItem = $ai[0] }
         $ui.AppPanel.Children.Clear(); foreach ($id in @($u.Apps)) { if ("$id" -match $WingetIdPattern) { Add-App $id $id } }
     }
-    $ui.Preset.SelectedItem = 'Custom'; $script:applying = $false
+    $ui.Preset.SelectedItem = if ($Name) { $Name } else { 'Custom' }; $script:applying = $false
     Update-Summary; Update-BuildHint
 }
 $ui.SavePreset.Add_Click({
-        $d = New-Object Windows.Forms.SaveFileDialog -Property @{ Filter = 'Preset (*.json)|*.json'; FileName = 'my-preset.json' }
-        if ($d.ShowDialog() -eq 'OK') { Get-PresetData (Get-Config) | ConvertTo-Json -Depth 4 | Set-Content $d.FileName } })
-function Import-PresetPath($Path) {
-    try { Import-PresetFile (Get-Content $Path -Raw | ConvertFrom-Json) } catch { $script:applying = $false; Show-Msg "Could not load this preset:`n`n$_" 'Error' | Out-Null }
+        $d = New-Object Windows.Forms.SaveFileDialog -Property @{ Filter = 'Preset (*.json)|*.json'; FileName = 'my-preset.json'; InitialDirectory = $presetDir }
+        if ($d.ShowDialog() -ne 'OK') { return }
+        Get-PresetData (Get-Config) | ConvertTo-Json -Depth 4 | Set-Content $d.FileName
+        Update-PresetList
+        if ($n = Get-PresetName $d.FileName) { $script:applying = $true; $ui.Preset.SelectedItem = $n; $script:applying = $false }
+    })
+function Import-PresetPath($Path, $Name) {
+    try { Import-PresetFile (Get-Content $Path -Raw | ConvertFrom-Json) $Name }
+    catch {
+        $script:applying = $true; $ui.Preset.SelectedItem = 'Custom'; $script:applying = $false
+        Show-Msg "Could not load this preset:`n`n$_" 'Error' | Out-Null
+    }
 }
 $ui.LoadPreset.Add_Click({
-        $d = New-Object Windows.Forms.OpenFileDialog -Property @{ Filter = 'Preset (*.json)|*.json' }
-        if ($d.ShowDialog() -eq 'OK') { Import-PresetPath $d.FileName } })
+        $d = New-Object Windows.Forms.OpenFileDialog -Property @{ Filter = 'Preset (*.json)|*.json'; InitialDirectory = $presetDir }
+        if ($d.ShowDialog() -eq 'OK') { Update-PresetList; Import-PresetPath $d.FileName (Get-PresetName $d.FileName) } })
+$ui.OpenPresets.Add_Click({ Start-Process explorer.exe $presetDir })
 # Written on every build start; never loaded automatically (each start uses defaults).
 $lastPreset = "$root\last-preset.json"
 $ui.LoadLast.Add_Click({ if (Test-Path $lastPreset) { Import-PresetPath $lastPreset } else { Show-Msg 'No build yet.' | Out-Null } })
 
+# Mounts every ISO in the folder, so it runs in the background; builds wait for it (they mount the same ISOs).
+$script:scanning = $false
 function Invoke-Scan {
-    $win.Cursor = 'Wait'; $ui.ScanResult.Text = 'Scanning...'
-    $win.Dispatcher.Invoke([Windows.Threading.DispatcherPriority]::Render, [action] {})
-    $script:IsoInfos = @(Get-SourceIsos $ui.IsoFolder.Text)
-    $win.Cursor = $null
-    $ui.ScanResult.Text = if ($script:IsoInfos) {
-        ($script:IsoInfos | ForEach-Object { "$($_.Lang)  -  build $($_.Build)  -  $($_.Editions.Count) editions  -  $(Split-Path $_.Path -Leaf)" }) -join "`n"
-    } else { 'No ISOs found in this folder.' }
-    if ($script:IsoInfos -and $script:IsoInfos[0].Lang -in $langs) { $ui.BaseLang.SelectedItem = $script:IsoInfos[0].Lang }
-    Update-Editions; Update-Storage
+    if ($script:scanning) { return }
+    $script:scanning = $true; $ui.ScanIsos.IsEnabled = $false; $ui.ScanResult.Text = 'Scanning your ISOs...'
+    Start-Background { param($root, $folder) Get-SourceIsos $folder } $ui.IsoFolder.Text {
+        param($out)
+        $script:scanning = $false; $ui.ScanIsos.IsEnabled = $true
+        $script:IsoInfos = @($out | ForEach-Object { $_ })
+        $ui.ScanResult.Text = if ($script:IsoInfos) {
+            ($script:IsoInfos | ForEach-Object { "$($_.Lang)  -  build $($_.Build)  -  $($_.Editions.Count) editions  -  $(Split-Path $_.Path -Leaf)" }) -join "`n"
+        } else { 'No ISOs found in this folder.' }
+        if ($script:IsoInfos -and $script:IsoInfos[0].Lang -in $script:langs) { $ui.BaseLang.SelectedItem = $script:IsoInfos[0].Lang }
+        Update-Editions; Update-Storage
+        if ($ui.Nav.SelectedItem.Tag -eq 'PageBuild') { Update-Plan }
+    }
 }
-$ui.ScanIsos.Add_Click({ Invoke-Scan })
+$ui.ScanIsos.Add_Click({ if ($script:job) { Show-Msg 'Wait until the build is finished.' | Out-Null; return }; Invoke-Scan })
 $ui.BaseLang.Add_SelectionChanged({ Update-Editions })
 $ui.UseUup.Add_Click({ Update-Editions })
 $ui.Build.Add_SelectionChanged({ Update-BuildHint })
@@ -298,7 +398,7 @@ $ui.Newest.Add_Click({ Update-BuildHint })
 # --- Config + validation ---
 function Get-Config {
     $uuid = ''
-    if ($ui.Build.SelectedIndex -gt 0) { $uuid = $buildList[$ui.Build.SelectedIndex - 1].uuid }
+    if ($ui.Build.SelectedIndex -gt 0) { $uuid = $script:buildList[$ui.Build.SelectedIndex - 1].uuid }
     @{
         IsoFolder = $ui.IsoFolder.Text; UseUup = [bool]$ui.UseUup.IsChecked; Newest = [bool]$ui.Newest.IsChecked; Fast = [bool]$ui.Fast.IsChecked; UupBuild = $uuid; BaseLang = [string]$ui.BaseLang.SelectedItem
         Editions = @($script:edChecks.Keys | Where-Object { $script:edChecks[$_].IsChecked })
@@ -369,6 +469,8 @@ function Update-Plan {
         if (-not $cfg.Editions) { $ui.PlanText.Text = 'Pick at least one edition on the Source page.'; return }
         $p = Get-BuildPlan $script:IsoInfos $script:UupBuilds $cfg
         $lines = @()
+        if ($script:scanning) { $lines += 'Still scanning your ISOs - this plan updates when done.' }
+        if ($script:uupLoading -and $cfg.UseUup) { $lines += 'Still loading the build list from UUP dump - this plan updates when done.' }
         if ($p.Error) { $lines += "PROBLEM: $($p.Error)" }
         if ($p.Note) { $lines += $p.Note }
         if ($p.Base) { $lines += "Source: your ISO $(Split-Path $p.Base.Path -Leaf) (build $($p.Base.Build))" }
@@ -385,6 +487,7 @@ function Update-Plan {
         $t = Get-Timing
         $min = 1 + [math]::Ceiling($t.($script:planKey) * $(if ($cached) { 1 } else { $script:planEds }))
         $min += $(if ($p.Missing) { if ($cfg.Fast) { 15 } else { 60 } } else { 0 })
+        $script:planMinutes = $min
         $lines += "Time: about $min minutes$(if ($cached) { ' (reusing the finished image from the last build)' })" +
             $(if ($t.Measured -contains $script:planKey) { ', measured on this PC' } else { ', estimate until the first build on this PC' })
         $need = Get-NeededGB $cached; $free = [math]::Round((Get-PSDrive $root.Substring(0, 1)).Free / 1GB)
@@ -469,33 +572,167 @@ $ui.TestVm.Add_Click({
 # --- Build run (background runspace, polled by a timer) ---
 $script:job = $null
 $timer = New-Object Windows.Threading.DispatcherTimer -Property @{ Interval = [TimeSpan]::FromMilliseconds(300) }
-$stepNames = 'Preflight', 'Sources', 'Editions', 'Patches', 'Setup (boot.wim)', 'Unattended', 'Compress', 'Create ISO', 'Finish'
+# Same 9 steps as Enter-Step in lib\Build.ps1.
+$steps = @(
+    @{ Name = 'Preflight'; Desc = 'Checking admin rights, disk space and build tools' }
+    @{ Name = 'Sources'; Desc = 'Reading your ISOs, downloading from UUP dump if needed' }
+    @{ Name = 'Editions'; Desc = 'Exporting the selected editions' }
+    @{ Name = 'Patches'; Desc = 'Mounting every edition and applying your patches' }
+    @{ Name = 'Setup (boot.wim)'; Desc = 'Patching setup to skip the hardware checks' }
+    @{ Name = 'Unattended'; Desc = 'Writing the answer file and setup scripts' }
+    @{ Name = 'Compress'; Desc = 'Compressing the final image' }
+    @{ Name = 'Create ISO'; Desc = 'Writing the bootable ISO' }
+    @{ Name = 'Finish'; Desc = 'Saving your settings and cleaning up' })
+function Format-Clock([timespan]$T) { if ($T.TotalHours -ge 1) { '{0:h\:mm\:ss}' -f $T } else { '{0:m\:ss}' -f $T } }
+function New-Brush($Hex) { $b = [Windows.Media.BrushConverter]::new().ConvertFromString($Hex); $b.Freeze(); $b }
+$brush = @{ Text = $win.FindResource('Text'); Muted = $win.FindResource('Muted'); Line = $win.FindResource('Line'); Card = $win.FindResource('CardBg')
+    Accent = $win.FindResource('Accent'); Success = $win.FindResource('Success'); Danger = $win.FindResource('Danger'); Warn = $win.FindResource('Warn')
+    Dark = New-Brush '#0E1014'; Dim = New-Brush '#5C6575'; LogText = New-Brush '#B9C2D0' }
+$iconFont = New-Object Windows.Media.FontFamily 'Segoe Fluent Icons, Segoe MDL2 Assets'
+
+# Step list: a dot per step (number, pulsing while active, check when done, cross when failed) joined by a line.
+$script:stepRows = @()
+for ($i = 1; $i -le 9; $i++) {
+    $row = New-Object Windows.Controls.DockPanel
+    $rail = New-Object Windows.Controls.Grid -Property @{ Width = 22 }
+    $line = New-Object Windows.Shapes.Rectangle -Property @{ Width = 2; Fill = $brush.Line; Margin = '0,22,0,0'; Visibility = $(if ($i -eq 9) { 'Hidden' } else { 'Visible' }) }
+    $scale = New-Object Windows.Media.ScaleTransform
+    $halo = New-Object Windows.Shapes.Ellipse -Property @{ Width = 20; Height = 20; Fill = $brush.Accent; Opacity = 0; VerticalAlignment = 'Top'; RenderTransformOrigin = '0.5,0.5'; RenderTransform = $scale }
+    $mark = New-Object Windows.Controls.TextBlock -Property @{ FontSize = 10; HorizontalAlignment = 'Center'; VerticalAlignment = 'Center' }
+    $dot = New-Object Windows.Controls.Border -Property @{ Width = 20; Height = 20; CornerRadius = 10; BorderThickness = 1.5; VerticalAlignment = 'Top'; Child = $mark }
+    foreach ($c in $line, $halo, $dot) { $rail.Children.Add($c) | Out-Null }
+    [Windows.Controls.DockPanel]::SetDock($rail, 'Left')
+    $time = New-Object Windows.Controls.TextBlock -Property @{ FontSize = 11; Margin = '8,2,0,0'; Foreground = $brush.Muted }
+    [Windows.Controls.DockPanel]::SetDock($time, 'Right')
+    $name = New-Object Windows.Controls.TextBlock -Property @{ Text = $steps[$i - 1].Name; Margin = '10,1,0,12'; TextTrimming = 'CharacterEllipsis'; TextWrapping = 'NoWrap' }
+    foreach ($c in $rail, $time, $name) { $row.Children.Add($c) | Out-Null }
+    $ui.StepList.Children.Add($row) | Out-Null
+    $script:stepRows += @{ N = $i; Line = $line; Halo = $halo; Scale = $scale; Dot = $dot; Mark = $mark; Name = $name; Time = $time }
+}
+function Set-StepState($I, $State, $Time) {
+    $r = $script:stepRows[$I - 1]
+    $r.Halo.BeginAnimation([Windows.UIElement]::OpacityProperty, $null)
+    foreach ($p in [Windows.Media.ScaleTransform]::ScaleXProperty, [Windows.Media.ScaleTransform]::ScaleYProperty) { $r.Scale.BeginAnimation($p, $null) }
+    # dot fill, dot border, mark text, mark color, name color, line color
+    $look = switch ($State) {
+        'active' { $brush.Accent, $brush.Accent, "$I", $brush.Dark, $brush.Text, $brush.Line }
+        'done' { $brush.Success, $brush.Success, [string][char]0xE73E, $brush.Dark, $brush.Text, $brush.Success }
+        'failed' { $brush.Danger, $brush.Danger, [string][char]0xE711, $brush.Dark, $brush.Danger, $brush.Line }
+        default { $brush.Card, $brush.Line, "$I", $brush.Muted, $brush.Muted, $brush.Line }
+    }
+    $r.Dot.Background = $look[0]; $r.Dot.BorderBrush = $look[1]; $r.Mark.Text = $look[2]; $r.Mark.Foreground = $look[3]
+    $r.Mark.FontFamily = if ($State -in 'done', 'failed') { $iconFont } else { $win.FontFamily }
+    $r.Name.Foreground = $look[4]; $r.Line.Fill = $look[5]
+    $r.Name.FontWeight = if ($State -eq 'active') { 'SemiBold' } else { 'Normal' }
+    if ($State -eq 'pending') { $r.Time.Text = '' } elseif ($Time) { $r.Time.Text = Format-Clock $Time }
+    if ($State -eq 'active') {
+        $r.Dot.BringIntoView()   # the list scrolls on small windows
+        $d =[Windows.Duration][TimeSpan]::FromSeconds(1.6); $forever = [Windows.Media.Animation.RepeatBehavior]::Forever
+        $r.Halo.BeginAnimation([Windows.UIElement]::OpacityProperty, (New-Object Windows.Media.Animation.DoubleAnimation ([double]0.5), ([double]0), $d -Property @{ RepeatBehavior = $forever }))
+        foreach ($p in [Windows.Media.ScaleTransform]::ScaleXProperty, [Windows.Media.ScaleTransform]::ScaleYProperty) {
+            $r.Scale.BeginAnimation($p, (New-Object Windows.Media.Animation.DoubleAnimation ([double]1), ([double]2), $d -Property @{ RepeatBehavior = $forever; DecelerationRatio = 1 }))
+        }
+    }
+}
+1..9 | ForEach-Object { Set-StepState $_ 'pending' }
+
+# Log: dim time, step headers in blue, warnings amber, errors red, DONE green. Follows new lines unless scrolled up.
+function Add-LogLine([string]$Text, $Color) {
+    $atEnd = $ui.Log.VerticalOffset + $ui.Log.ViewportHeight -ge $ui.Log.ExtentHeight - 24
+    $p = New-Object Windows.Documents.Paragraph
+    $msg = $Text
+    if ($Text -match '^(\[\d\d:\d\d:\d\d\]) (.*)$') {
+        $p.Inlines.Add((New-Object Windows.Documents.Run "$($Matches[1])  " -Property @{ Foreground = $brush.Dim })); $msg = $Matches[2]
+    }
+    $run = New-Object Windows.Documents.Run $msg
+    $run.Foreground = if ($Color) { $Color } elseif ($msg -match '^== ') { $brush.Accent } elseif ($msg -match '^\s*(ERROR|FAILED)|^Result:\s+FAILED') { $brush.Danger }
+        elseif ($msg -match '^\s*(WARN|NOTE)') { $brush.Warn } elseif ($msg -match '^DONE|^Result:\s+OK') { $brush.Success } else { $brush.LogText }
+    if ($msg -match '^== |^DONE') { $run.FontWeight = 'SemiBold'; $p.Margin = '0,10,0,2' }
+    $p.Inlines.Add($run)
+    $ui.Log.Document.Blocks.Add($p)
+    if ($atEnd) { $ui.Log.ScrollToEnd() }
+}
+
+# nussico banner at the top of the log (GUI only, not written to build-log.txt).
+$banner = @'
+                           _
+ _ __   _   _  ___   ___  (_)   ___    ___
+| '_ \ | | | |/ __| / __| | |  / __|  / _ \
+| | | || |_| |\__ \ \__ \ | | | (__  | (_) |
+|_| |_| \__,_||___/ |___/ |_|  \___|  \___/
+'@
+function Show-Banner {
+    foreach ($l in $banner -split "`r?`n") {
+        $p = New-Object Windows.Documents.Paragraph -Property @{ Margin = '0'; LineHeight = 15; LineStackingStrategy = 'BlockLineHeight' }
+        $p.Inlines.Add((New-Object Windows.Documents.Run $l -Property @{ Foreground = $brush.Accent; FontWeight = 'SemiBold' }))
+        $ui.Log.Document.Blocks.Add($p)
+    }
+    Add-LogLine "Win11 Ultimate ISO Builder $toolVersion  -  github.com/$repo" $brush.Dim
+}
+Show-Banner
+
+# Status card look: idle / running / done / failed / cancelled.
+function Set-BuildStatus($State, $Title, $Text) {
+    $ui.StepTitle.Text = $Title; $ui.StepText.Text = $Text
+    $ui.StatusCard.BorderBrush = switch ($State) { 'running' { $brush.Accent } 'done' { $brush.Success } 'failed' { $brush.Danger } 'cancelled' { $brush.Warn } default { $brush.Line } }
+    $ui.Progress.Tag = switch ($State) { 'running' { 'running' } 'done' { 'done' } { $_ -in 'failed', 'cancelled' } { 'error' } default { $null } }
+    $ui.OpenResult.Visibility = if ($State -eq 'done') { 'Visible' } else { 'Collapsed' }
+}
+$ui.OpenResult.Add_Click({ if (Test-Path $script:buildOutput) { Start-Process explorer.exe "/select,`"$script:buildOutput`"" } })
+
 $timer.Add_Tick({
         $line = $null
-        while ($script:sync.Log.TryDequeue([ref]$line)) { $ui.Log.AppendText("$line`r`n"); $ui.Log.ScrollToEnd() }
-        $s = [math]::Min(9, $script:sync.Step)
-        if ($s -ne $script:shownStep) {   # glide to the new step instead of jumping
-            $script:shownStep = $s; $script:stepStart = Get-Date
-            if ($s -eq 3) { $script:imageStart = Get-Date }   # after the download, so the measured time is this PC's own speed
-            $ui.Progress.BeginAnimation([Windows.Controls.ProgressBar]::ValueProperty, (New-Object Windows.Media.Animation.DoubleAnimation $s, ([Windows.Duration][TimeSpan]::FromMilliseconds(500))))
+        while ($script:sync.Log.TryDequeue([ref]$line)) { Add-LogLine $line }
+        $s = [math]::Min(9, $script:sync.Step); $now = Get-Date
+        if ($s -ne $script:shownStep) {
+            # The previous step (and any never shown in between) is done.
+            for ($i = [math]::Max(1, $script:shownStep); $i -lt $s; $i++) { Set-StepState $i 'done' $(if ($script:stepStarts[$i]) { $now - $script:stepStarts[$i] }) }
+            $script:shownStep = $s; $script:stepStarts[$s] = $now
+            if ($s -eq 3) { $script:imageStart = $now }   # after the download, so the measured time is this PC's own speed
+            Set-StepState $s 'active'
+            Set-BuildStatus 'running' $steps[$s - 1].Name "Step $s of 9  -  $($steps[$s - 1].Desc)"
         }
-        # Running clocks show the build is alive during long silent DISM operations.
-        $win.TaskbarItemInfo.ProgressState = 'Normal'; $win.TaskbarItemInfo.ProgressValue = $s / 9
-        if ($s -gt 0) { $ui.StepText.Text = "Step $s of 9 - $($stepNames[$s - 1])   |   {0:mm\:ss} in this step   |   {1:hh\:mm\:ss} total" -f ((Get-Date) - $script:stepStart), ((Get-Date) - $script:buildStart) }
+        # Running clocks and a creeping bar show the build is alive during long silent DISM operations:
+        # within a step the bar eases toward the next step but never reaches it.
+        $elapsed = $now - $script:buildStart
+        $ui.Elapsed.Text = Format-Clock $elapsed
+        $v = 0
+        if ($s -gt 0) {
+            $inStep = ($now - $script:stepStarts[$s]).TotalSeconds
+            $script:stepRows[$s - 1].Time.Text = Format-Clock ($now - $script:stepStarts[$s])
+            $v = ($s - 1) + 0.9 * (1 - [math]::Exp(-$inStep / 90))
+        }
+        $ui.Progress.Value = $v
+        $win.TaskbarItemInfo.ProgressState = 'Normal'; $win.TaskbarItemInfo.ProgressValue = $v / 9
+        if ($script:planMinutes) {
+            $left = $script:planMinutes - $elapsed.TotalMinutes
+            $ui.Eta.Text = if ($left -ge 1.5) { "about $([math]::Round($left)) min left" } elseif ($left -gt -3) { 'almost done' } else { 'longer than estimated' }
+        }
         if ($script:sync.Done -or $script:job.Handle.IsCompleted) {
             if (-not $script:sync.Done -and -not $script:sync.Error) { $script:sync.Error = 'The build stopped unexpectedly. See the log.' }
-            foreach ($e in $script:job.PS.Streams.Error) { $ui.Log.AppendText("ERROR: $e`r`n") }
+            while ($script:sync.Log.TryDequeue([ref]$line)) { Add-LogLine $line }
+            foreach ($e in $script:job.PS.Streams.Error) { Add-LogLine "ERROR: $e" }
             $timer.Stop()
-            try { $script:job.PS.EndInvoke($script:job.Handle) } catch { $ui.Log.AppendText("$_`r`n") }
+            try { $script:job.PS.EndInvoke($script:job.Handle) } catch { Add-LogLine "$_" $brush.Danger }
             $script:job.PS.Runspace.Close(); $script:job.PS.Dispose(); $script:job = $null
             $ui.BuildBtn.Content = 'Build ISO'; $ui.BuildBtn.Tag = $null; $ui.BuildBtn.IsEnabled = $true
             $win.TaskbarItemInfo.ProgressState = if ($script:sync.Error) { 'Error' } else { 'None' }; $win.TaskbarItemInfo.ProgressValue = 1
             if (-not $win.IsActive) { [W11.Native]::Flash((New-Object Windows.Interop.WindowInteropHelper $win).Handle) }
+            $ui.Eta.Text = 'total time'
             Update-Storage
-            if ($script:sync.Error) { $ui.StepText.Text = 'Failed'; Show-Msg "Build failed:`n$($script:sync.Error)`n`nDetails: build-log.txt next to the ISO." 'Error' | Out-Null }
-            else {
+            if ($script:sync.Error -eq 'Cancelled by user') {
+                if ($s -gt 0) { Set-StepState $s 'failed' ($now - $script:stepStarts[$s]) }
+                Set-BuildStatus 'cancelled' 'Build cancelled' "Stopped in step $s. Click Build ISO to start again."
+            } elseif ($script:sync.Error) {
+                if ($s -gt 0) { Set-StepState $s 'failed' ($now - $script:stepStarts[$s]) }
+                Set-BuildStatus 'failed' 'Build failed' "$($script:sync.Error)  -  details in build-log.txt next to the ISO."
+                Show-Msg "Build failed:`n$($script:sync.Error)`n`nDetails: build-log.txt next to the ISO." 'Error' | Out-Null
+            } else {
                 if ($script:imageStart -and $script:planKey) { Save-Timing $script:planKey (((Get-Date) - $script:imageStart).TotalMinutes / $(if ($script:planKey -eq 'Cached') { 1 } else { $script:planEds })) }
-                $ui.StepText.Text = 'Done'; Show-Msg "ISO ready:`n$($ui.Output.Text)" | Out-Null }
+                Set-StepState 9 'done' ($now - $script:stepStarts[9]); $ui.Progress.Value = 9
+                $size = try { " ($([math]::Round((Get-Item $script:buildOutput).Length / 1GB, 1)) GB)" } catch { '' }
+                Set-BuildStatus 'done' 'ISO ready' "$script:buildOutput$size"
+            }
         }
     })
 
@@ -515,8 +752,10 @@ function Get-WipePreview($Mode) {
 $ui.BuildBtn.Add_Click({
         if ($script:job) {
             $script:sync.Cancel = $true; $ui.BuildBtn.IsEnabled = $false
-            $ui.Log.AppendText("Cancelling after the current operation...`r`n"); return
+            Add-LogLine 'Cancelling after the current operation...' $brush.Warn
+            $ui.StepText.Text = 'Cancelling after the current operation...'; return
         }
+        if ($script:scanning) { Show-Msg 'Wait until the ISO scan is finished.' | Out-Null; return }
         $cfg = Get-Config
         $err, $field = Test-Config $cfg
         if ($err) { Show-Field $field; Show-Msg $err 'Warning' | Out-Null; return }
@@ -527,8 +766,11 @@ $ui.BuildBtn.Add_Click({
         }
         Get-PresetData $cfg | ConvertTo-Json -Depth 4 | Set-Content $lastPreset
         try { Hyper-V\Get-VMDvdDrive -VMName $vmName -ErrorAction Stop | Where-Object Path -eq $cfg.Output | Hyper-V\Set-VMDvdDrive -Path $null } catch { }
-        $ui.Log.Clear(); $ui.Progress.BeginAnimation([Windows.Controls.ProgressBar]::ValueProperty, $null); $ui.Progress.Value = 0; $script:shownStep = 0; $script:buildStart = Get-Date; $ui.StepText.Text = 'Starting...'
-        $script:imageStart = $null; $script:planKey = $null; Update-Plan   # sets planKey / planEds for the timing
+        $ui.Log.Document.Blocks.Clear(); Show-Banner; $ui.Progress.Value = 0; $script:shownStep = 0; $script:stepStarts = @{}; $script:buildStart = Get-Date
+        1..9 | ForEach-Object { Set-StepState $_ 'pending' }
+        $script:buildOutput = $cfg.Output; $ui.Elapsed.Text = '0:00'; $ui.Eta.Text = ''
+        Set-BuildStatus 'running' 'Starting...' 'Preparing the build'
+        $script:imageStart = $null; $script:planKey = $null; Update-Plan   # sets planKey / planEds / planMinutes for the timing
         $script:sync = [hashtable]::Synchronized(@{ Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]'; Step = 0; Cancel = $false; Done = $false; Error = $null })
         $ps = [powershell]::Create()
         $ps.AddScript({
@@ -544,6 +786,8 @@ $ui.BuildBtn.Add_Click({
 $win.Add_Closing({
         param($s, $e)
         if ($script:job) { $e.Cancel = $true; Show-Msg 'A build is running. Cancel it first.' | Out-Null; return }
+        # Closing mid-scan would leave an ISO mounted.
+        if ($script:scanning) { $e.Cancel = $true; Show-Msg 'Scanning your ISOs. Close again in a moment.' | Out-Null; return }
     })
 
 $ui.Preset.SelectedItem = 'Recommended'

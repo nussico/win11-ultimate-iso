@@ -1,8 +1,7 @@
 # Win11 Ultimate ISO Builder
 
-Build **one Windows 11 ISO** with the editions you want, in the language of your choice,
-[CTT WinUtil](https://github.com/ChrisTitusTech/winutil) Win11 Creator-style patches and an optional unattended setup,
-all from a dark, point-and-click GUI.
+Make your own Windows 11 ISO in a simple dark GUI: pick editions and language, tick the
+[CTT WinUtil](https://github.com/ChrisTitusTech/winutil)-style tweaks you want, and optionally make setup install itself.
 
 ![Patches page](docs/screenshot.png)
 
@@ -14,77 +13,59 @@ Open PowerShell and run:
 irm https://raw.githubusercontent.com/nussico/win11-ultimate-iso/main/install.ps1 | iex
 ```
 
-It asks which drive to use (Enter = the drive it is already on, or the one with the most free space), downloads the
-builder to `Win11UltimateBuilder` there and starts it as admin.
-Next time, start it with the *Win11 Ultimate ISO Builder* shortcut in that folder (nothing is added to Start menu or desktop).
-Moved the folder? Right-click `Builder.ps1` -> *Run with PowerShell* once and the shortcut works again. When a new version is out, an **Update available** button shows in the top bar:
-one click updates and restarts. Your ISOs, output and cache are kept.
+1. Confirm the admin prompt.
+2. Pick a drive, or press **B** (or type a path) to pick a folder. Enter picks the best drive. Builds need about 60 GB free.
+3. The builder opens. It lives in a new `Win11UltimateBuilder` folder on that drive or inside your folder.
 
-Manual: download the repo ZIP, extract, right-click `Builder.ps1` -> *Run with PowerShell*.
+Next time, start it with the **Win11 Ultimate ISO Builder** shortcut in that folder. Nothing is added to the Start menu or desktop.
+When a new version is out, click **Update available** in the top bar. Your ISOs and builds are kept.
 
-## Features
+Moved the folder? Right-click `Builder.ps1` > *Run with PowerShell* once to fix the shortcut.
 
-- **Always newest**: picks the newest general Windows 11 release (today 26H2) and downloads it if your ISO is an older version.
-- **Fast mode** (default): UUP downloads skip merging the latest update (~15 min instead of ~60). The ISO then holds the older base build (e.g. 26100) and Windows Update brings it up to date after setup; turn it off once for a fully current ISO. Downloaded ISOs are kept in `sources` and reused, so later builds skip the download either way.
-- **Sources**: your own official ISOs, and/or automatic download through [UUP dump](https://uupdump.net)
-  (Home, Pro, Education, Enterprise).
-- **Language**: one language per ISO (setup and Windows); more can be added later in Windows Settings.
-- **Presets**: Basic, Recommended, CTT, Extreme, or tick everything yourself. *Save* / *Load* keeps your own setup in a .json file (no password, product key or paths), e.g. for another PC. *Last build* loads the settings of your last build, so with *Auto* one more click on Build gives you the same ISO with the newest Windows.
-- **Patches**
-  - Setup: TPM / Secure Boot / RAM / CPU checks, local account, skip privacy screens, no auto-BitLocker
-  - Apps: preinstalled bloat, Xbox app, OneDrive. Essential apps (Store, winget, Calculator, Photos, Xbox login, Game Bar...) are protected
-  - Privacy: telemetry, ads/tips/Copilot, activity history, advertising ID, error reporting, Bing in Start, typing data, tailored experiences
-  - Taskbar & Start: icons on the left, End task, hide search box / Task View / widgets, more Start pins, clock seconds
-  - Explorer: classic right-click menu, file extensions, hidden files, open This PC, compact view, hide Gallery
-  - System: dark mode, no Fast Startup, no hibernation, long paths, services to manual (CTT)
-  - Updates: no P2P sharing, no driver updates, no automatic restart
-  - Gaming: no background recording, GPU scheduling, no power throttling, game priority, no mouse acceleration, no Sticky Keys popup
-  - Aggressive: remove Edge (keeps WebView2), disable Defender, disable Recall
-  - Extras: inject drivers, CTT WinUtil shortcut
-- **Unattended**: local account (default `User`), timezone, keyboard, skip OOBE, product key, run WinUtil or your own script after first login.
-- **Wi-Fi**: network name + password; Windows joins it after the first login, so apps install without a cable. The password is in plain text on the ISO (never in config.json or preset files), and the file is deleted from the PC after it is imported.
-- **Apps**: search winget in the builder and add apps (Steam, Discord, Firefox...); they install automatically after the first login.
-- **Version stamp**: every ISO is named `W11U_<version>` (shown in Explorer and on the USB stick) and has a `Win11Ultimate.txt` saying which builder version made it and with which editions and patches, plus `Win11Ultimate-preset.json` (also next to the ISO in the output folder) you can *Load* to build it again.
-- **Image cache**: the finished Windows image is kept, so a rebuild with the same source ISO, editions and patches (e.g. only Unattended or apps changed) skips mounting, patching and compressing and takes a few minutes. *Clean up* deletes it.
-- **Build plan**: the Build page shows what will happen before you start (reuse or download, time, disk space). Taskbar progress, and the window flashes when done.
-- **Storage**: sizes of ISOs, builds and leftovers; *Clean up* deletes temp files and outdated downloads (never your own ISOs).
-- **Test in VM**: one click creates a Hyper-V VM (no TPM, so it tests the bypasses) that boots the built ISO.
-- **Automatic install**: *Best SSD* picks the one clear best internal disk (NVMe > SSD > HDD, never USB) with a 10 s cancel countdown, otherwise normal setup opens. Before building, the warning shows which disk it would erase on *this* PC.
+## What it does
 
-## Requirements
+- **Newest Windows**: downloads the newest Windows 11 through [UUP dump](https://uupdump.net), or uses your own ISO.
+  *Fast mode* (default) skips merging the latest update: about 15 instead of 60 minutes, and Windows Update catches up after setup.
+- **Editions and language**: Home, Pro, Education, Enterprise. One language per ISO.
+- **Patches**: no TPM/Secure Boot/CPU checks, local account, debloat, privacy, taskbar, Explorer, gaming and update tweaks.
+  Essential apps (Store, winget, Calculator, Photos, Xbox login, Game Bar...) are never removed.
+- **Unattended setup**: account, timezone, keyboard, product key, Wi-Fi, winget apps (Steam, Discord...) and your own script after first login.
+- **Automatic install**: *Best SSD* picks the fastest internal disk and installs with a 10 s cancel countdown.
+- **Presets**: Basic, Recommended, CTT, Extreme, or your own: *Save* puts them in the `presets` folder and they show up in the preset list (drop shared `.json` presets there too). *Last build* repeats your last settings.
+- **Fast rebuilds**: the finished image is cached, so changing only setup options takes a few minutes.
+- **Test in VM**: one click boots the ISO in Hyper-V.
 
-Windows 10/11, admin rights, about 60 GB free disk space (15 GB when the cached image is reused), internet for UUP dump.
-The first build installs the Windows ADK *Deployment Tools* via winget.
-
-## Presets
+Every ISO is named `W11U_<version>` and contains `Win11Ultimate.txt` (what was built) and a preset you can load to build it again.
 
 | Preset | Patches |
 |---|---|
 | Basic | setup bypasses |
-| Recommended | + bloat apps and OneDrive (keeps the Xbox app), privacy, file extensions, End task, no auto-restart, no background recording |
-| CTT | + CTT's UI tweaks, services to manual, WinUtil shortcut; unattended: skip OOBE, run WinUtil |
-| Extreme | everything incl. Edge / Defender / Recall and the Xbox app |
+| Recommended | + debloat (keeps the Xbox app), OneDrive, privacy, file extensions, End task, no auto-restart, no background recording |
+| CTT | + CTT's UI tweaks, services to manual, runs WinUtil after setup |
+| Extreme | everything, incl. removing Edge, Defender, Recall and the Xbox app |
 
-## Testing a build
+## Requirements
+
+Windows 10/11, admin rights, about 60 GB free (15 GB for a cached rebuild), internet.
+The first build installs the Windows ADK *Deployment Tools* via winget.
+
+## Good to know
+
+- The Wi-Fi password is stored in plain text on the ISO (never in your settings or presets).
+- *Best SSD* needs UEFI; on legacy BIOS normal setup opens. Before building, the builder shows which disk it would erase on *this* PC.
+- Cancel waits for the running DISM step to finish, then cleans up.
+- Activation: your own key or the PC's digital license. No activation tools included.
+
+## For developers
 
 ```powershell
-powershell -File tests\SelfTest.ps1      # logic checks, no admin needed
+powershell -File tests\SelfTest.ps1      # logic checks, no admin
 powershell -File tests\Test-Build.ps1    # checks out\Win11.iso (admin)
 ```
 
-Then click **Test in VM** on the Build page (needs Hyper-V) and install it there.
-
-## Known limits
-
-- Cancel takes effect between steps; a running DISM operation finishes first, then everything is unmounted and discarded.
-- *Best SSD* auto-install needs UEFI; on legacy BIOS the normal setup opens.
-- Activation: use your own key or the PC's existing digital license. No activation tools are included.
+Manual install: download the ZIP, extract, right-click `Builder.ps1` > *Run with PowerShell*.
 
 ## Disclaimer
 
 Not affiliated with Microsoft, Chris Titus Tech or UUP dump. Aggressive patches and automatic install can break things
-or erase disks. Use at your own risk.
-
-## License
-
-[MIT](LICENSE)
+or erase disks. Use at your own risk. [MIT license](LICENSE).

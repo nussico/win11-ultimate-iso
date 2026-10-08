@@ -22,6 +22,8 @@
       </GeometryGroup></GeometryDrawing.Geometry></GeometryDrawing>
     </DrawingGroup></DrawingImage.Drawing></DrawingImage>
     <SolidColorBrush x:Key="Danger" Color="#F87171"/>
+    <SolidColorBrush x:Key="Success" Color="#34D399"/>
+    <SolidColorBrush x:Key="Warn" Color="#FBBF24"/>
 
     <Style TargetType="TextBlock"><Setter Property="Foreground" Value="{StaticResource Text}"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
     <Style x:Key="H1" TargetType="TextBlock"><Setter Property="FontSize" Value="22"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Foreground" Value="{StaticResource Text}"/><Setter Property="Margin" Value="0,0,0,4"/></Style>
@@ -174,11 +176,33 @@
       </ControlTemplate></Setter.Value></Setter>
     </Style>
 
+    <!-- Gradient bar; Tag running = light sweeping across it, done = green, error = red -->
     <Style TargetType="ProgressBar">
       <Setter Property="Height" Value="6"/>
       <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ProgressBar">
-        <Grid><Border Background="#232834" CornerRadius="3"/>
-          <Border x:Name="PART_Track"/><Border x:Name="PART_Indicator" Background="{StaticResource Accent}" CornerRadius="3" HorizontalAlignment="Left"/></Grid>
+        <Grid><Border Background="#232834" CornerRadius="4"/>
+          <Border x:Name="PART_Track"/>
+          <Border x:Name="PART_Indicator" CornerRadius="4" HorizontalAlignment="Left" ClipToBounds="True">
+            <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,0"><GradientStop Color="#3B6FE0" Offset="0"/><GradientStop Color="#7AA7FF" Offset="1"/></LinearGradientBrush></Border.Background>
+            <Grid>
+              <Border x:Name="ok" Opacity="0"><Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,0"><GradientStop Color="#1FA97A" Offset="0"/><GradientStop Color="#34D399" Offset="1"/></LinearGradientBrush></Border.Background></Border>
+              <Border x:Name="bad" Opacity="0"><Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,0"><GradientStop Color="#C04848" Offset="0"/><GradientStop Color="#F87171" Offset="1"/></LinearGradientBrush></Border.Background></Border>
+              <Rectangle x:Name="shine" Width="140" HorizontalAlignment="Left" Opacity="0">
+                <Rectangle.Fill><LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                  <GradientStop Color="#00FFFFFF" Offset="0"/><GradientStop Color="#55FFFFFF" Offset="0.5"/><GradientStop Color="#00FFFFFF" Offset="1"/></LinearGradientBrush></Rectangle.Fill>
+                <Rectangle.RenderTransform><TranslateTransform x:Name="sweep" X="-140"/></Rectangle.RenderTransform></Rectangle>
+            </Grid>
+          </Border></Grid>
+        <ControlTemplate.Triggers>
+          <Trigger Property="Tag" Value="running">
+            <Setter TargetName="shine" Property="Opacity" Value="1"/>
+            <Trigger.EnterActions><BeginStoryboard x:Name="sweepAnim"><Storyboard RepeatBehavior="Forever">
+              <DoubleAnimation Storyboard.TargetName="sweep" Storyboard.TargetProperty="X" From="-140" To="1400" Duration="0:0:2.4"/></Storyboard></BeginStoryboard></Trigger.EnterActions>
+            <Trigger.ExitActions><StopStoryboard BeginStoryboardName="sweepAnim"/></Trigger.ExitActions>
+          </Trigger>
+          <Trigger Property="Tag" Value="done"><Setter TargetName="ok" Property="Opacity" Value="1"/></Trigger>
+          <Trigger Property="Tag" Value="error"><Setter TargetName="bad" Property="Opacity" Value="1"/></Trigger>
+        </ControlTemplate.Triggers>
       </ControlTemplate></Setter.Value></Setter>
     </Style>
     <Style TargetType="ScrollBar">
@@ -213,7 +237,7 @@
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
           <TextBlock x:Name="Summary" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="0,0,16,0"/>
           <ComboBox x:Name="Preset" Width="130" ToolTip="Preset: which patches are ticked"/>
-          <Button x:Name="SavePreset" Content="Save" Margin="8,0,0,0" ToolTip="Save these settings to a preset file (no password or product key)"/>
+          <Button x:Name="SavePreset" Content="Save" Margin="8,0,0,0" ToolTip="Save these settings as a preset in the presets folder (no password or product key)"/>
           <Button x:Name="LoadPreset" Content="Load" Margin="6,0,0,0" ToolTip="Load settings from a preset file"/>
           <Button x:Name="LoadLast" Content="Last" Margin="6,0,0,0" ToolTip="Load the settings of your last build (Auto then picks the newest Windows)"/>
         </StackPanel>
@@ -358,16 +382,38 @@
             <CheckBox x:Name="DefenderExclude" Style="{StaticResource Toggle}" Content="Skip Defender scan of work folder" Margin="0" ToolTip="Faster mount/save. Only the work folder is excluded, and only until the build ends."/>
           </StackPanel></Border>
         </Grid>
-        <DockPanel Grid.Row="2" Margin="0,4,0,14">
-          <Button x:Name="BuildBtn" Style="{StaticResource Primary}" Content="Build ISO" DockPanel.Dock="Right" MinWidth="160"/>
-          <StackPanel VerticalAlignment="Center" Margin="0,0,24,0">
-            <TextBlock x:Name="StepText" Text="Ready" Foreground="{StaticResource Muted}" Margin="0,0,0,8"/>
-            <ProgressBar x:Name="Progress" Maximum="9"/></StackPanel>
-        </DockPanel>
-        <Border Grid.Row="3" Background="#0A0C10" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="10" Padding="4">
-          <TextBox x:Name="Log" Height="Auto" Padding="10,8" IsReadOnly="True" Background="Transparent" BorderThickness="0" FontFamily="Cascadia Mono, Consolas" FontSize="12"
-                   Foreground="#B9C2D0" VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" VerticalContentAlignment="Top"/>
+        <!-- Status: what is happening now, time, progress. Border turns green / red when the build ends. -->
+        <Border x:Name="StatusCard" Grid.Row="2" Style="{StaticResource Card}" Padding="20,16">
+          <DockPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="24,0,0,0">
+              <Button x:Name="OpenResult" Content="Show in folder" Margin="0,0,10,0" Padding="16,10" Visibility="Collapsed"/>
+              <Button x:Name="BuildBtn" Style="{StaticResource Primary}" Content="Build ISO" MinWidth="160"/></StackPanel>
+            <StackPanel VerticalAlignment="Center">
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Right" VerticalAlignment="Bottom" Margin="16,0,0,0">
+                  <TextBlock x:Name="Elapsed" FontSize="22" FontWeight="SemiBold" FontFamily="Segoe UI Variable Display, Segoe UI" HorizontalAlignment="Right"/>
+                  <TextBlock x:Name="Eta" FontSize="12" Foreground="{StaticResource Muted}" HorizontalAlignment="Right"/></StackPanel>
+                <StackPanel>
+                  <TextBlock x:Name="StepTitle" Text="Ready to build" FontSize="17" FontWeight="SemiBold"/>
+                  <TextBlock x:Name="StepText" Text="Check the plan, then click Build ISO." Foreground="{StaticResource Muted}" Margin="0,2,0,0"/></StackPanel>
+              </DockPanel>
+              <ProgressBar x:Name="Progress" Maximum="9" Height="8" Margin="0,14,0,0"/></StackPanel>
+          </DockPanel>
         </Border>
+        <Grid Grid.Row="3">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="240"/><ColumnDefinition/></Grid.ColumnDefinitions>
+          <!-- Step list, filled by Builder.ps1 -->
+          <Border Style="{StaticResource Card}" Margin="0,0,14,0" Padding="18,14">
+            <DockPanel><TextBlock Text="STEPS" Style="{StaticResource Section}" DockPanel.Dock="Top"/>
+              <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel x:Name="StepList"/></ScrollViewer></DockPanel>
+          </Border>
+          <Border Grid.Column="1" Background="#0A0C10" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="10" Padding="4">
+            <RichTextBox x:Name="Log" Padding="10,8" IsReadOnly="True" Background="Transparent" BorderThickness="0" FontFamily="Cascadia Mono, Consolas" FontSize="12"
+                         Foreground="#B9C2D0" VerticalScrollBarVisibility="Auto" IsDocumentEnabled="False">
+              <RichTextBox.Resources><Style TargetType="Paragraph"><Setter Property="Margin" Value="0,0,0,2"/></Style></RichTextBox.Resources>
+              <FlowDocument/></RichTextBox>
+          </Border>
+        </Grid>
         <Border Grid.Row="4" Style="{StaticResource Card}" Margin="0,14,0,0"><StackPanel>
           <TextBlock Text="TEST &amp; STORAGE" Style="{StaticResource Section}"/>
           <DockPanel>
@@ -388,7 +434,8 @@
           <StackPanel Style="{StaticResource Row}"><TextBlock Text="Installed in" Style="{StaticResource Label}"/><TextBlock x:Name="InfoFolder"/></StackPanel>
           <StackPanel Orientation="Horizontal"><TextBlock Text="Project page" Style="{StaticResource Label}"/>
             <Button x:Name="OpenGitHub" Content="github.com/nussico/win11-ultimate-iso" Padding="10,4"/>
-            <Button x:Name="OpenFolder" Content="Open folder" Padding="10,4" Margin="10,0,0,0"/></StackPanel>
+            <Button x:Name="OpenFolder" Content="Open folder" Padding="10,4" Margin="10,0,0,0"/>
+            <Button x:Name="OpenPresets" Content="Presets folder" Padding="10,4" Margin="10,0,0,0" ToolTip="Your saved presets. Every .json here shows up in the preset list."/></StackPanel>
         </StackPanel></Border>
         <Border Style="{StaticResource Card}"><StackPanel>
           <TextBlock Text="HOW TO USE" Style="{StaticResource Section}"/>
