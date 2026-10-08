@@ -10,10 +10,13 @@ The user is an IT apprentice and gamer. Answer in short, plain English.
 - `irm https://raw.githubusercontent.com/nussico/win11-ultimate-iso/main/install.ps1 | iex`
 - install.ps1 asks for admin (reruns itself elevated), asks for a drive or folder (B = browse, or a typed path) and installs to
   `<drive or folder>\Win11UltimateBuilder` (a folder that already is the builder folder is used as-is). It
-  writes the commit to `version.txt` and starts the builder. The Update button reruns it with `$env:W11UB_DIR` set (no drive prompt).
+  installs the newest commit whose CI check passed, writes it to `version.txt` and starts the builder.
 - The install folder also holds `sources\ out\ cache\ work\ vm\`; updates never touch them.
 - Builder.ps1 rewrites its shortcut in the install folder on every start. Never add Start menu or desktop shortcuts.
-- At start the GUI compares `version.txt` with GitHub and shows "Update available".
+- Updates: at start the GUI compares `version.txt` with main on GitHub. Only if main's `selftest` check passed does it show
+  "Update available" plus a popup with the commit titles (a "No" is remembered in `update-skip.txt`). Update reruns
+  install.ps1 with `$env:W11UB_DIR` (no drive prompt) and `$env:W11UB_SHA` (exactly the offered commit).
+- CI: `.github/workflows/check.yml` runs `tests\Check.ps1` on every push. A failing check = nobody is offered that commit.
 - Dev clones: `D:\projects\win11-ultimate-iso`, `C:\Users\nuss\win11-ultimate-iso`. A git checkout has no version.txt ("dev").
 
 ## Files
@@ -22,10 +25,13 @@ The user is an IT apprentice and gamer. Answer in short, plain English.
 - `lib/Window.xaml` - dark theme. Pages: Source, Patches, Unattended, Build, Info.
 - `lib/Build.ps1` - `Invoke-Build`, steps 1-9, log + summary in `out\build-log.txt`.
 - `lib/Source.ps1` - ISO detection, UUP dump (`Get-UupBuilds`, `Select-NewestUupBuild`, `Save-UupIso`), `Get-BuildPlan`.
+  "Newest" = `Test-GeneralRelease`: H2 releases minus `$NewPcOnlyReleases` (26H1). Microsoft lists device-only releases as
+  GA too, so no data field decides this. A newer unchecked release is reported (`Get-SkippedNewerRelease`, plan + log), never picked.
 - `lib/Patches.ps1` - `$Patches` catalog, `$RemoveApps`, `$ProtectedApps`, `$Presets`, `$CttTweaks`, offline registry helpers.
 - `lib/Unattend.ps1` - autounattend.xml.
 - `lib/autoinstall.js` - Best-SSD disk picker, JScript run by cscript inside Setup.
-- `tests/SelfTest.ps1` - checks without admin. `tests/Test-Build.ps1` - checks a finished ISO (admin).
+- `tests/Check.ps1` - what CI runs: parse + ASCII for all code files, Window.xaml load, then `tests/SelfTest.ps1` (logic, no admin).
+  `tests/Test-Build.ps1` - checks a finished ISO (admin).
 
 ## Rules
 - Windows PowerShell 5.1 compatible, ASCII-only, CRLF (`.gitattributes`). No new dependencies.
@@ -52,6 +58,12 @@ The user is an IT apprentice and gamer. Answer in short, plain English.
 - Inside Setup, MSFT_PhysicalDisk returns no disks; use Win32_DiskDrive. NVMe = `VEN_NVME` in PNPDeviceID, SATA SSD guessed from the model.
 - `R` is an alias for Invoke-History; don't name functions `R`.
 - raw.githubusercontent.com caches ~5 min after a push; give a commit-hash URL if the user needs it now.
+- `Start-Background` results: return a `[pscustomobject]`, never a hashtable. One result is unwrapped, and `$out[0]` on a
+  hashtable looks up key 0 -> $null.
+- This PC has `NoDefaultCurrentDirectoryInExePath=1`: cmd won't run scripts from the current folder without `.\`.
+- UUP dump's `uup_download_windows.cmd` restarts itself elevated when not admin, and the original exits at once.
+  Test downloads/Cancel only from an admin shell, or the download runs on out of reach.
+- GitHub API without a token: 60 calls/hour per IP. Don't poll it in tight loops while testing (`/rate_limit` is free).
 
 ## How to work
 1. Read the code first and reuse existing helpers. Make the smallest correct change, fixed at the root.
@@ -60,5 +72,6 @@ The user is an IT apprentice and gamer. Answer in short, plain English.
    - `powershell -NoProfile -File tests\Check.ps1` (CI runs the same; add SelfTest checks for new logic)
    - XAML: `[xml](Get-Content lib\Window.xaml -Raw)`. For UI changes, run the GUI non-elevated with self-elevation patched out and take a RenderTargetBitmap screenshot.
    - Real builds and UAC need admin; say clearly what was not tested.
-3. Commit with a clear message; push to `main` when the user wants it shipped, then tell them to rerun the install line.
+3. Commit with a clear message; push to `main` when the user wants it shipped. Wait for the GitHub check to pass:
+   then installed builders offer the update by themselves (a failed check blocks it).
 4. Build log pasted? Read the `== Summary` block first, then the line before `ERROR`.

@@ -18,13 +18,16 @@ irm https://raw.githubusercontent.com/nussico/win11-ultimate-iso/main/install.ps
 3. The builder opens. It lives in a new `Win11UltimateBuilder` folder on that drive or inside your folder.
 
 Next time, start it with the **Win11 Ultimate ISO Builder** shortcut in that folder. Nothing is added to the Start menu or desktop.
-When a new version is out, click **Update available** in the top bar. Your ISOs and builds are kept.
+When a new version is out, the builder asks if you want to update, and shows what's new
+(or click **Update available** in the top bar later). Your ISOs and builds are kept.
 
 Moved the folder? Right-click `Builder.ps1` > *Run with PowerShell* once to fix the shortcut.
 
 ## What it does
 
 - **Newest Windows**: downloads the newest Windows 11 through [UUP dump](https://uupdump.net), or uses your own ISO.
+  "Newest" means the newest version for every PC: versions only for certain new PCs (like 26H1) are skipped,
+  but you can pick them under *Windows version*.
   *Fast mode* (default) skips merging the latest update: about 15 instead of 60 minutes, and Windows Update catches up after setup.
 - **Editions and language**: Home, Pro, Education, Enterprise. One language per ISO.
 - **Patches**: no TPM/Secure Boot/CPU checks, local account, debloat, privacy, taskbar, Explorer, gaming and update tweaks.
@@ -53,7 +56,7 @@ The first build installs the Windows ADK *Deployment Tools* via winget.
 
 - The Wi-Fi password is stored in plain text on the ISO (never in your settings or presets).
 - *Best SSD* needs UEFI; on legacy BIOS normal setup opens. Before building, the builder shows which disk it would erase on *this* PC.
-- Cancel waits for the running DISM step to finish, then cleans up.
+- Cancel stops a Windows download right away. During the image steps it waits for the running DISM step to finish, then cleans up.
 - Activation: your own key or the PC's digital license. No activation tools included.
 
 ## For developers
@@ -62,6 +65,9 @@ The first build installs the Windows ADK *Deployment Tools* via winget.
 powershell -File tests\Check.ps1         # what CI runs: parse, ASCII, XAML + logic checks, no admin
 powershell -File tests\Test-Build.ps1    # checks out\Win11.iso (admin)
 ```
+
+GitHub runs `tests\Check.ps1` on every push. Installed builders are only offered versions where it passed,
+so a failing check means nobody gets that version.
 
 Manual install: download the ZIP, extract, right-click `Builder.ps1` > *Run with PowerShell*.
 
