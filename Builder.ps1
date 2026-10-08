@@ -84,7 +84,9 @@ $bgTimer = New-Object Windows.Threading.DispatcherTimer -Property @{ Interval = 
 $bgTimer.Add_Tick({
         foreach ($j in @($script:bgJobs | Where-Object { $_.Handle.IsCompleted })) {
             $script:bgJobs.Remove($j)
-            $out = try { @($j.PS.EndInvoke($j.Handle)) } catch { @() }
+            $out = try { @($j.PS.EndInvoke($j.Handle)) } catch { $j.PS.Streams.Error.Add($_); @() }
+            # Failures still count as "nothing" for the UI, but leave a trace instead of vanishing.
+            foreach ($e in @($j.PS.Streams.Error) + @($j.PS.Streams.Warning)) { try { Add-Content "$root\out\background-errors.txt" "$(Get-Date -Format s)  $e  $($e.InvocationInfo.PositionMessage)" } catch { } }
             $j.PS.Runspace.Close(); $j.PS.Dispose()
             & $j.Done $out
         }
@@ -383,6 +385,7 @@ function Import-PresetFile($p, $Name) {
     Update-Editions
     if ($p.PSObject.Properties['Editions']) { foreach ($e in $script:edChecks.Keys) { $script:edChecks[$e].IsChecked = $e -in @($p.Editions) } }
     if ($p.PSObject.Properties['Patches']) { foreach ($id in $patchChecks.Keys) { $patchChecks[$id].IsChecked = $id -in @($p.Patches) } }
+    $pm = @($ui.PatchMode.Items | Where-Object Tag -eq $p.PatchMode); if ($pm) { $ui.PatchMode.SelectedItem = $pm[0] }   # older presets: keep the current mode
     if ($u = $p.Unattend) {
         foreach ($k in 'UserName', 'AutoLogon', 'ComputerName', 'TimeZone', 'Keyboard', 'Locale', 'SkipOobe', 'RunWinUtil', 'EnableAdmin', 'WifiName') { & $set $k $u.$k }
         & $set 'UnattendOn' $u.Enabled; & $set 'AdminGroup' $u.Admin
@@ -447,7 +450,7 @@ function Get-Config {
     @{
         IsoFolder = $ui.IsoFolder.Text; UseUup = [bool]$ui.UseUup.IsChecked; Newest = [bool]$ui.Newest.IsChecked; Fast = [bool]$ui.Fast.IsChecked; UupBuild = $uuid; BaseLang = [string]$ui.BaseLang.SelectedItem
         Editions = @($script:edChecks.Keys | Where-Object { $script:edChecks[$_].IsChecked })
-        Patches = @($Patches.Keys | Where-Object { $patchChecks[$_].IsChecked }); DriversPath = $ui.DriversPath.Text
+        Patches = @($Patches.Keys | Where-Object { $patchChecks[$_].IsChecked }); PatchMode = [string]$ui.PatchMode.SelectedItem.Tag; DriversPath = $ui.DriversPath.Text
         Unattend = @{
             Enabled = [bool]$ui.UnattendOn.IsChecked; UserName = $ui.UserName.Text.Trim(); Password = $ui.Password.Password
             AutoLogon = [bool]$ui.AutoLogon.IsChecked; Admin = [bool]$ui.AdminGroup.IsChecked; ComputerName = $ui.ComputerName.Text.Trim()
@@ -499,7 +502,7 @@ function Show-Field($Name) {
 # Minutes for steps 3-9 (Cached = whole image reused, Quick/Max = per edition). Defaults until a build on this PC measured them.
 $timingFile = "$root\timing.json"
 function Get-Timing {
-    $t = @{ Cached = 2; Quick = 6; Max = 8; Measured = @() }
+    $t = @{ Cached = 2; Quick = 6; Max = 8; Setup = 2; Measured = @() }
     try { $j = Get-Content $timingFile -Raw -ErrorAction Stop | ConvertFrom-Json; foreach ($k in $j.PSObject.Properties.Name) { $t[$k] = [double]$j.$k; $t.Measured += $k } } catch { }
     $t
 }
@@ -547,14 +550,14 @@ function Update-Plan {
         # Same cache check as the build. Image time (steps 3-9) is measured on this PC after each build.
         $cachePath = if ($p.Base -and -not $p.Missing) { Get-ImageCachePath $cfg @($cfg.Editions | ForEach-Object { @{ Iso = $p.Base.Path; Name = $_ } }) }
         $cached = $cachePath -and (Test-Path $cachePath)
-        $script:planKey = if ($cached) { 'Cached' } elseif ($cfg.QuickCompress) { 'Quick' } else { 'Max' }; $script:planEds = $cfg.Editions.Count
+        $script:planKey = if ($cached) { 'Cached' } elseif ($cfg.PatchMode -eq 'Setup') { 'Setup' } elseif ($cfg.QuickCompress) { 'Quick' } else { 'Max' }; $script:planEds = $cfg.Editions.Count
         $t = Get-Timing
         $img = $t.($script:planKey) * $(if ($cached) { 1 } else { $script:planEds })   # steps 3-9
         $dl = if ($p.Missing) { if ($cfg.Fast) { 15 } else { 60 } } else { 0 }          # step 2
         $min = 1 + [math]::Ceiling($img) + $dl
         # Minutes per step for the progress bar and the time left. Shares of steps 3-9 come from real builds:
         # patching is the longest step, compression only matters at max compression, a cached image mostly writes the ISO.
-        $share = switch ($script:planKey) { Cached { 0.05, 0.05, 0.05, 0.05, 0.05, 0.6, 0.15 } Quick { 0.27, 0.5, 0.06, 0.01, 0.04, 0.1, 0.02 } default { 0.2, 0.37, 0.05, 0.01, 0.27, 0.08, 0.02 } }
+        $share = switch ($script:planKey) { Cached { 0.05, 0.05, 0.05, 0.05, 0.05, 0.6, 0.15 } Setup { 0.6, 0.01, 0.01, 0.03, 0.01, 0.3, 0.04 } Quick { 0.27, 0.5, 0.06, 0.01, 0.04, 0.1, 0.02 } default { 0.2, 0.37, 0.05, 0.01, 0.27, 0.08, 0.02 } }
         $script:planSteps = @(0.2, ($dl + 0.8)) + @($share | ForEach-Object { $_ * $img })
         $need = Get-NeededGB $cached; $free = [math]::Round((Get-PSDrive $root.Substring(0, 1)).Free / 1GB)
 
@@ -569,7 +572,7 @@ function Update-Plan {
         }
         Add-PlanRow 'Editions' ($cfg.Editions -join ', ')
         Add-PlanRow 'Language' $cfg.BaseLang
-        Add-PlanRow 'Patches' "$($cfg.Patches.Count) selected"
+        Add-PlanRow 'Patches' "$($cfg.Patches.Count) selected" $(if ($cfg.PatchMode -eq 'Setup') { 'applied during Windows setup' } else { 'applied into the image' })
         $setup = if (-not $cfg.Unattend.Enabled) { 'Normal Windows setup' } elseif ($cfg.Unattend.AutoInstall -eq 'BestSsd') { 'Installs by itself onto the best SSD' } elseif ($cfg.Unattend.AutoInstall -eq 'Disk0') { 'Installs by itself onto disk 0 (wipes it)' } else { 'Unattended: account and settings preset' }
         Add-PlanRow 'Setup' $setup
     } catch { Add-PlanNotice "Plan not available: $_" $brush.Danger }

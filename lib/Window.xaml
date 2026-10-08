@@ -289,6 +289,14 @@
       <ScrollViewer x:Name="PagePatches" Style="{StaticResource Page}" Visibility="Collapsed" VerticalScrollBarVisibility="Auto"><StackPanel Margin="36,30,36,30">
         <TextBlock Text="Patches" Style="{StaticResource H1}"/>
         <TextBlock Text="CTT Win11 Creator style tweaks, applied to every edition. Essential apps (Store, winget, Calculator, Photos, Xbox login, Game Bar...) are always protected." Style="{StaticResource Sub}"/>
+        <Border Style="{StaticResource Card}" Margin="0,0,10,10"><StackPanel>
+          <TextBlock Text="WHEN PATCHES ARE APPLIED" Style="{StaticResource Section}"/>
+          <ComboBox x:Name="PatchMode" Width="460" HorizontalAlignment="Left">
+            <ComboBoxItem Content="Into the image - build takes about 10 min per edition" Tag="Image" IsSelected="True"/>
+            <ComboBoxItem Content="During Windows setup - build in a few minutes (like CTT Win11 Creator)" Tag="Setup"/>
+          </ComboBox>
+          <TextBlock Style="{StaticResource Hint}" Margin="0,8,0,0" TextWrapping="Wrap" Text="Into the image: every edition is patched while building, so the patches are there however Windows gets installed. During setup: the image stays exactly as Microsoft made it; this ISO's answer file applies the patches while Windows installs, before the first login (log: C:\Windows\Setup\Scripts\Win11Ultimate-patches.log). Patches are missing if you install another way, e.g. an upgrade started from inside Windows."/>
+        </StackPanel></Border>
         <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
           <StackPanel x:Name="PatchCol0"/><StackPanel x:Name="PatchCol1" Grid.Column="1"/><StackPanel x:Name="PatchCol2" Grid.Column="2"/></Grid>
         <StackPanel x:Name="PatchWide"/>

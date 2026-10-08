@@ -86,6 +86,48 @@ function New-LocalAccountXml {
     '<OOBE><HideOnlineAccountScreens>true</HideOnlineAccountScreens></OOBE></component></settings></unattend>'
 }
 
+# "During setup" patch mode without the Unattended page: an answer file that only carries the patch commands.
+function New-EmptyUnattendXml { '<?xml version="1.0" encoding="utf-8"?><unattend xmlns="urn:schemas-microsoft-com:unattend"></unattend>' }
+
+# Adds the "during setup" patch commands to an answer file:
+#   windowsPE:  the TPM/CPU/RAM bypass (Setup checks the PC before the image exists, so it can't come from the
+#               specialize script; first command, before Best SSD's install takes over)
+#   specialize: the patch script (lib\Patches.ps1 New-SetupPatchScript), as SYSTEM before OOBE
+function Add-SetupPatchCommands([string]$Xml, [bool]$HwChecks) {
+    $ns = 'urn:schemas-microsoft-com:unattend'; $wcm = 'http://schemas.microsoft.com/WMIConfig/2002/State'
+    $doc = [xml]$Xml; $doc.DocumentElement.SetAttribute('xmlns:wcm', $wcm)
+    $node = { param($parent, $name) $n = $parent.ChildNodes | Where-Object LocalName -eq $name | Select-Object -First 1
+        if (-not $n) { $n = $parent.AppendChild($doc.CreateElement($name, $ns)) }; $n }
+    $pass = { param($p) $s = $doc.DocumentElement.ChildNodes | Where-Object { $_.LocalName -eq 'settings' -and $_.pass -eq $p } | Select-Object -First 1
+        if (-not $s) { $s = $doc.DocumentElement.AppendChild($doc.CreateElement('settings', $ns)); $s.SetAttribute('pass', $p) }; $s }
+    $comp = { param($settings, $name) $c = $settings.ChildNodes | Where-Object { $_.LocalName -eq 'component' -and $_.name -eq $name } | Select-Object -First 1
+        if (-not $c) {
+            $c = $settings.AppendChild($doc.CreateElement('component', $ns))
+            foreach ($a in @{ name = $name; processorArchitecture = 'amd64'; publicKeyToken = '31bf3856ad364e35'; language = 'neutral'; versionScope = 'nonSxS' }.GetEnumerator()) { $c.SetAttribute($a.Key, $a.Value) }
+        }; $c }
+    # Commands go first; existing ones (Best SSD's install) are renumbered after them.
+    $prepend = { param($component, $listName, $itemName, $field, [string[]]$cmds)
+        $list = & $node $component $listName
+        $old = @($list.ChildNodes | Where-Object LocalName -eq $itemName)
+        $i = 0
+        foreach ($c in $cmds) {
+            $item = $doc.CreateElement($itemName, $ns); $item.SetAttribute('action', $wcm, 'add') | Out-Null
+            $i++; $o = $item.AppendChild($doc.CreateElement('Order', $ns)); $o.InnerText = "$i"
+            $f = $item.AppendChild($doc.CreateElement($field, $ns)); $f.InnerText = $c
+            $list.InsertBefore($item, $(if ($old) { $old[0] } else { $null })) | Out-Null
+        }
+        foreach ($item in $old) { $i++; ($item.ChildNodes | Where-Object LocalName -eq 'Order').InnerText = "$i" }
+    }
+    if ($HwChecks) {
+        $lab = @($Patches.hwchecks.Reg | Where-Object { $_ -like 'SYSTEM\Setup\LabConfig|*' } | ForEach-Object {
+                $null, $name, $value = $_ -split '\|'; "reg add HKLM\SYSTEM\Setup\LabConfig /v $name /t REG_DWORD /d $value /f" })
+        & $prepend (& $comp (& $pass 'windowsPE') 'Microsoft-Windows-Setup') 'RunSynchronous' 'RunSynchronousCommand' 'Path' $lab
+    }
+    & $prepend (& $comp (& $pass 'specialize') 'Microsoft-Windows-Deployment') 'RunSynchronous' 'RunSynchronousCommand' 'Path' @(
+        'powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Setup\Scripts\Win11Ultimate-patches.ps1')
+    $doc.OuterXml
+}
+
 function New-UnattendXml($u) {
     $esc = { param($s) [Security.SecurityElement]::Escape([string]$s) }
     $comp = { param($name, $body) "<component name=`"$name`" processorArchitecture=`"amd64`" publicKeyToken=`"31bf3856ad364e35`" language=`"neutral`" versionScope=`"nonSxS`">$body</component>" }

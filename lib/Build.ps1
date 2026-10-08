@@ -28,7 +28,7 @@ function Write-BuildHeader($Cfg) {
     Write-Log "Host:           $((Get-CimInstance Win32_OperatingSystem).Caption) $([Environment]::OSVersion.Version), PowerShell $($PSVersionTable.PSVersion)"
     Write-Log "Editions:       $($Cfg.Editions -join ', ')"
     Write-Log "Base language:  $($Cfg.BaseLang)"
-    Write-Log "Patches:        $(if ($Cfg.Patches) { ($Cfg.Patches | ForEach-Object { $Patches[$_].Label }) -join '; ' } else { 'none' })"
+    Write-Log "Patches:        $(if ($Cfg.Patches) { ($Cfg.Patches | ForEach-Object { $Patches[$_].Label }) -join '; ' } else { 'none' })$(if ($Cfg.PatchMode -eq 'Setup') { '  (applied during Windows Setup)' })"
     Write-Log "Source:         ISO folder $($Cfg.IsoFolder); UUP dump $(if ($Cfg.UseUup) { 'on' } else { 'off' }); always newest $(if ($Cfg.Newest) { 'on' } else { 'off' }); fast mode $(if ($Cfg.Fast) { 'on' } else { 'off' })"
     Write-Log "Unattended:     $(if ($u.Enabled) { "user '$($u.UserName)', auto-install $($u.AutoInstall), edition '$($u.Edition)', $(if ($u.ProductKey) { 'own product key' } else { 'generic key' }), skip OOBE $($u.SkipOobe)" } else { 'off' })"
     Write-Log "Output:         $($Cfg.Output)$(if ($Cfg.Split) { ' (install.wim split for FAT32)' })"
@@ -83,7 +83,7 @@ function Assert-FreeSpace($Path, [bool]$Cached) {
 }
 function Get-ImageCacheKey($Cfg, $Sources) {
     $parts = @($Sources | ForEach-Object { $f = Get-Item $_.Iso; "$($f.FullName)|$($f.Length)|$($f.LastWriteTimeUtc.Ticks)|$($_.Name)" }) +
-        ($Cfg.Patches -join ',') + "$($Cfg.QuickCompress)" + (Get-Content "$PSScriptRoot\Patches.ps1", "$PSScriptRoot\Build.ps1" -Raw)
+        ($Cfg.Patches -join ',') + "$($Cfg.QuickCompress)" + "$($Cfg.PatchMode)" + (Get-Content "$PSScriptRoot\Patches.ps1", "$PSScriptRoot\Build.ps1" -Raw)
     $hash = [Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($parts -join "`n"))
     'install-' + (-join ($hash[0..7] | ForEach-Object { $_.ToString('x2') })) + '.wim'
 }
@@ -96,7 +96,7 @@ function Get-IsoInfoText($Cfg) {
         ''
         "Editions:   $($Cfg.Editions -join ', ')"
         "Language:   $($Cfg.BaseLang)"
-        "Patches:    $(if ($Cfg.Patches) { $Cfg.Patches -join ', ' } else { 'none' })"
+        "Patches:    $(if ($Cfg.Patches) { $Cfg.Patches -join ', ' } else { 'none' })$(if ($Cfg.PatchMode -eq 'Setup') { ' (applied during Windows Setup)' })"
         "Unattended: $(if ($Cfg.Unattend.Enabled) { "yes, automatic install $($Cfg.Unattend.AutoInstall)" } else { 'no' })"
         "Apps:       $(if ($Cfg.Unattend.Enabled -and $Cfg.Unattend.Apps) { $Cfg.Unattend.Apps -join ', ' } else { 'none' })"
     ) -join "`r`n"
@@ -140,6 +140,22 @@ function Disable-Indexing([string[]]$Paths) {
             $d = Get-Item $p -Force; $d.Attributes = $d.Attributes -bor [IO.FileAttributes]::NotContentIndexed
         } catch { Write-Log "NOTE: could not turn off indexing for $p ($_)" }
     }
+}
+
+# "During setup" mode: the patch script, Patches.ps1 and what the patches need (.NET 3.5 cab, drivers) go to
+# $OEM$\$$\Setup\Scripts, which Setup copies to C:\Windows\Setup\Scripts before the specialize pass.
+function Copy-SetupPatches($Cfg, $IsoDir) {
+    $dir = "$IsoDir\sources\`$OEM`$\`$`$\Setup\Scripts"
+    New-Item -ItemType Directory -Force $dir | Out-Null
+    Copy-Item "$PSScriptRoot\Patches.ps1" $dir
+    Set-Content "$dir\Win11Ultimate-patches.ps1" (New-SetupPatchScript $Cfg.Patches $Cfg)
+    if ('netfx3' -in $Cfg.Patches) {
+        New-Item -ItemType Directory -Force "$dir\sxs" | Out-Null
+        Copy-Item "$IsoDir\sources\sxs\*NetFx3*" "$dir\sxs" -ErrorAction SilentlyContinue
+        if (-not (Get-ChildItem "$dir\sxs")) { Write-Log 'WARN .NET 3.5: no NetFx3 package in this ISO''s sources\sxs, it will not be installed' }
+    }
+    if ('drivers' -in $Cfg.Patches) { Copy-Item $Cfg.DriversPath "$dir\drivers" -Recurse }
+    Write-Log "Patches staged for Windows Setup: $($Cfg.Patches.Count), log on the installed PC: C:\Windows\Setup\Scripts\Win11Ultimate-patches.log"
 }
 
 function Invoke-Build($Cfg, $Sync) {
@@ -219,61 +235,76 @@ function Invoke-Build($Cfg, $Sync) {
         $cacheWim = Get-ImageCachePath $Cfg $sources
         $cached = $cacheWim -and (Test-Path $cacheWim)
         if (-not $cached) { Assert-FreeSpace $w $false }
+        # Into the image (default): mount every edition. During setup: the image stays as Microsoft made it.
+        $setupMode = $Cfg.PatchMode -eq 'Setup'
+        $mountPatch = $Cfg.Patches -and -not $setupMode
+        # Quick = XPRESS: a few minutes faster per edition, about 1 GB bigger ISO.
+        $comp = if ($Cfg.QuickCompress) { 'fast' } else { 'max' }
 
         Enter-Step 3 'Editions'
         if ($cached) { Write-Log 'Same source ISO, editions and patches as the last build: reusing the finished image (steps 3, 4 and 7 skipped)' }
+        $images = @()   # @{ Index; Name } in the export
         foreach ($s in $sources) {
             if ($cached) { break }
             $wim = Get-InstallImage (Mount-SourceIso $s.Iso)
             $idx = (Get-WindowsImage -ImagePath $wim | Where-Object ImageName -eq $s.Name).ImageIndex
             if (-not $idx) { throw "'$($s.Name)' is not in $(Split-Path $s.Iso -Leaf). Rescan your ISOs and pick the editions again." }
-            Write-Log "Export $($s.Name) (index $idx) - takes 1-3 minutes"
-            Export-WindowsImage -SourceImagePath $wim -SourceIndex $idx -DestinationImagePath "$w\install.wim" -CompressionType fast | Out-Null
+            # All editions in one WIM: files they share are stored once, so editions 2+ take seconds.
+            # Nothing to patch in the image: export straight into the finished install.wim, step 7 has nothing left to do.
+            $dest, $ct = if ($mountPatch) { "$w\install.wim", 'fast' } else { "$w\iso\sources\install.wim", $comp }
+            Write-Log "Export $($s.Name) (index $idx) - takes $(if ($ct -eq 'fast') { '1-3' } else { '5-10' }) minutes"
+            Export-WindowsImage -SourceImagePath $wim -SourceIndex $idx -DestinationImagePath $dest -CompressionType $ct | Out-Null
+            $images += @{ Index = $images.Count + 1; Name = $s.Name }
         }
         Clear-BuildState
 
         Enter-Step 4 'Patches'
-        $images = if (-not $cached) { Get-WindowsImage -ImagePath "$w\install.wim" }
-        foreach ($img in $images) {
-            if ($Sync.Cancel) { throw 'Cancelled by user' }
-            Write-Log "Mount $($img.ImageName) - takes 1-2 minutes"
-            Mount-WindowsImage -ImagePath "$w\install.wim" -Index $img.ImageIndex -Path "$w\mount" | Out-Null
-            Invoke-Patches "$w\mount" $Cfg.Patches $Cfg
-            # ponytail: no StartComponentCleanup here (slow, small gain); the max-compression export in step 7 shrinks the image.
-            Write-Log "Saving $($img.ImageName) - writing the image and cleaning up takes 3-5 minutes, no output meanwhile"
-            Dismount-WindowsImage -Path "$w\mount" -Save | Out-Null
-            Write-Log "Saved $($img.ImageName)"
+        if ($setupMode -and $Cfg.Patches) { Write-Log 'Patches run during Windows Setup (specialize pass): the image stays unchanged' }
+        elseif ($mountPatch) {
+            foreach ($img in $images) {
+                if ($Sync.Cancel) { throw 'Cancelled by user' }
+                Write-Log "Mount $($img.Name) - takes 1-3 minutes"
+                Mount-WindowsImage -ImagePath "$w\install.wim" -Index $img.Index -Path "$w\mount" | Out-Null
+                Invoke-Patches "$w\mount" $Cfg.Patches $Cfg
+                # ponytail: no StartComponentCleanup here (slow, small gain); the max-compression export in step 7 shrinks the image.
+                Write-Log "Saving $($img.Name) - writing the image and cleaning up takes 3-6 minutes, no output meanwhile"
+                Dismount-WindowsImage -Path "$w\mount" -Save | Out-Null
+                Write-Log "Saved $($img.Name)"
+            }
         }
 
         Enter-Step 5 'Setup (boot.wim)'
-        if ($Cfg.Patches -contains 'hwchecks') {
+        if ($setupMode -and $Cfg.Patches -contains 'hwchecks') { Write-Log 'TPM/CPU/RAM check bypass: set by autounattend.xml (windowsPE pass), boot.wim unchanged' }
+        elseif ($Cfg.Patches -contains 'hwchecks') {
             Mount-WindowsImage -ImagePath "$w\iso\sources\boot.wim" -Index 2 -Path "$w\mount" | Out-Null
             Set-BootPatches "$w\mount"
             Dismount-WindowsImage -Path "$w\mount" -Save | Out-Null
         }
 
         Enter-Step 6 'Unattended'
+        $xml = $null
         if ($Cfg.Unattend.Enabled) {
             $dir = "$w\iso\sources\`$OEM`$\`$`$\Setup\Scripts"   # copied to C:\Windows\Setup\Scripts
             if ($Cfg.Unattend.CustomScript -or $Cfg.Unattend.Apps -or $Cfg.Unattend.WifiName) { New-Item -ItemType Directory -Force $dir | Out-Null }
             if ($Cfg.Unattend.WifiName) { [IO.File]::WriteAllText("$dir\wifi.xml", (New-WifiProfile $Cfg.Unattend.WifiName $Cfg.Unattend.WifiPassword)); Write-Log "Wi-Fi: $($Cfg.Unattend.WifiName) (password in plain text on the ISO)" }
             if ($Cfg.Unattend.CustomScript) { Copy-Item $Cfg.Unattend.CustomScript "$dir\custom.ps1" }
             if ($Cfg.Unattend.Apps) { Set-Content "$dir\apps.ps1" (New-AppsScript $Cfg.Unattend.Apps); Write-Log "Apps: $($Cfg.Unattend.Apps -join ', ')" }
-            [IO.File]::WriteAllText("$w\iso\autounattend.xml", (New-UnattendXml $Cfg.Unattend))
+            $xml = New-UnattendXml $Cfg.Unattend
             if ($Cfg.Unattend.AutoInstall -eq 'BestSsd') { Copy-Item "$PSScriptRoot\autoinstall.js" "$w\iso\sources\autoinstall.js" }
-            Write-Log 'autounattend.xml written'
+            $what = ''
         }
-        elseif ('localaccount' -in $Cfg.Patches) {
-            [IO.File]::WriteAllText("$w\iso\autounattend.xml", (New-LocalAccountXml))
-            Write-Log 'autounattend.xml written (only hides Microsoft account screens)'
+        elseif ('localaccount' -in $Cfg.Patches) { $xml = New-LocalAccountXml; $what = ' (only hides Microsoft account screens)' }
+        elseif ($setupMode -and $Cfg.Patches) { $xml = New-EmptyUnattendXml; $what = ' (only runs the patches)' }
+        if ($setupMode -and $Cfg.Patches) {
+            Copy-SetupPatches $Cfg "$w\iso"
+            $xml = Add-SetupPatchCommands $xml ('hwchecks' -in $Cfg.Patches)
         }
+        if ($xml) { [IO.File]::WriteAllText("$w\iso\autounattend.xml", $xml); Write-Log "autounattend.xml written$what" }
 
         Enter-Step 7 'Compress'
-        # Quick = XPRESS: a few minutes faster per edition, about 1 GB bigger ISO.
-        $comp = if ($Cfg.QuickCompress) { 'fast' } else { 'max' }
-        foreach ($img in $images) {
-            Write-Log "Export $($img.ImageName) ($comp compression) - takes $(if ($Cfg.QuickCompress) { '1-3' } else { '5-10' }) minutes"
-            Export-WindowsImage -SourceImagePath "$w\install.wim" -SourceIndex $img.ImageIndex -DestinationImagePath "$w\iso\sources\install.wim" -CompressionType $comp | Out-Null
+        foreach ($img in $images | Where-Object { $mountPatch }) {
+            Write-Log "Export $($img.Name) ($comp compression) - takes $(if ($Cfg.QuickCompress) { '1-3' } else { '5-10' }) minutes"
+            Export-WindowsImage -SourceImagePath "$w\install.wim" -SourceIndex $img.Index -DestinationImagePath "$w\iso\sources\install.wim" -CompressionType $comp | Out-Null
         }
         if ($cached) { Write-Log 'Copying the cached image'; Copy-Item $cacheWim "$w\iso\sources\install.wim" }
         elseif ($cacheWim) {

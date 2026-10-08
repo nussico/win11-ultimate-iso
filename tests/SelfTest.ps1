@@ -34,10 +34,28 @@ $script:logged = ''; Remove-ImagePath "$tmp\file.exe"; Remove-ImagePath "$tmp\di
 Assert (-not (Test-Path "$tmp\file.exe") -and -not (Test-Path "$tmp\dir") -and $script:logged -notmatch 'not a valid directory') 'Remove-ImagePath: single file and folder'
 Remove-Item $tmp -Recurse -Force
 
+# Patch targets: during setup HKLM is the running system
+$Online = $true
+Assert ((Convert-RegPath 'SOFTWARE\X') -eq 'HKLM\SOFTWARE\X' -and (Convert-RegPath 'DEFAULT\Y') -eq 'HKLM\WIM_DEFAULT\Y' -and (Get-ImageArg 'C:').Online) 'Online: HKLM direct, default user hive loaded, DISM -Online'
+$Online = $false
+Assert ((Get-ImageArg 'X:\m').Path -eq 'X:\m') 'Offline: DISM -Path'
+
+# During-setup script: parses, runs each patch on its own, quotes values safely
+$ss = New-SetupPatchScript @('bloatapps', 'pinversion') @{ ReleaseVersion = "25H2'x" }
+$e = $null; [Management.Automation.Language.Parser]::ParseInput($ss, [ref]$null, [ref]$e) | Out-Null
+Assert (-not $e -and $ss -match "@\('bloatapps', 'pinversion'\)" -and $ss -match "'25H2''x'" -and $ss -match '\$Online = \$true') 'Setup patch script: valid, ids + quoted version'
+$ux = [xml](Add-SetupPatchCommands (New-UnattendXml @{ UserName = 'U'; Password = ''; TimeZone = 'UTC'; Keyboard = 'de-DE'; Locale = 'de-DE'; Edition = 'Windows 11 Pro'; AutoInstall = 'BestSsd' }) $true)
+$pe = @(($ux.unattend.settings | Where-Object pass -eq 'windowsPE').component | Where-Object name -eq 'Microsoft-Windows-Setup').RunSynchronous.RunSynchronousCommand
+Assert ($pe[0].Path -match 'LabConfig' -and $pe[-1].Path -match 'autoinstall\.js' -and (($pe.Order) -join ',') -eq '1,2,3,4,5,6') 'Setup mode: TPM bypass runs before Best SSD install, orders renumbered'
+$sp = @(($ux.unattend.settings | Where-Object pass -eq 'specialize').component | Where-Object name -eq 'Microsoft-Windows-Deployment').RunSynchronous.RunSynchronousCommand
+Assert ($sp.Path -match 'Win11Ultimate-patches\.ps1' -and $ux.OuterXml -notmatch 'd\dp\d:') 'Setup mode: specialize runs the patch script, wcm prefix kept'
+$ex = [xml](Add-SetupPatchCommands (New-EmptyUnattendXml) $false)
+Assert (-not ($ex.unattend.settings | Where-Object pass -eq 'windowsPE') -and ($ex.unattend.settings | Where-Object pass -eq 'specialize')) 'Setup mode without Unattended: answer file with only the patch script'
+
 # Features: missing ones skipped (Home), a failure only warns, the source reaches DISM
 Assert ('pinversion' -notin $Presets.Extreme.Patches -and -not ($Presets.Extreme.Patches | Where-Object { $Patches[$_].Group -eq 'Features' })) 'Extreme skips features and the version pin'
 function Get-WindowsOptionalFeature { @([pscustomobject]@{ FeatureName = 'NetFx3' }, [pscustomobject]@{ FeatureName = 'Bad' }) }
-function Enable-WindowsOptionalFeature { param($Path, $FeatureName, [switch]$All, $Source, [switch]$LimitAccess); if ($FeatureName -eq 'Bad') { throw 'boom' }; $script:logged += "src=$Source`n" }
+function Enable-WindowsOptionalFeature { param($Path, $FeatureName, [switch]$All, $Source, [switch]$LimitAccess, [switch]$NoRestart); if ($FeatureName -eq 'Bad') { throw 'boom' }; $script:logged += "src=$Source`n" }
 $script:logged = ''; Enable-ImageFeature 'X:\mount' 'Microsoft-Hyper-V-All', 'Bad', 'NetFx3' 'X:\iso\sources\sxs'
 Assert ($script:logged -match 'skip feature Microsoft-Hyper-V-All' -and $script:logged -match 'WARN could not enable Bad' -and $script:logged -match 'src=X:\\iso\\sources\\sxs' -and $script:logged -match 'enable feature NetFx3') 'Enable-ImageFeature: skip, warn, source'
 Remove-Item function:Get-WindowsOptionalFeature, function:Enable-WindowsOptionalFeature
@@ -182,6 +200,7 @@ Assert ($pj -match 'Max' -and $pj -match 'Valve.Steam' -and $pj -match 'hwchecks
     $src = @(@{ Iso = $PSCommandPath; Name = 'Windows 11 Pro' })
     $k = { param($p, $u) Get-ImageCacheKey @{ Patches = $p; QuickCompress = $true; Unattend = @{ UserName = $u } } $src }
     Assert ((& $k @('hwchecks') 'A') -eq (& $k @('hwchecks') 'B') -and (& $k @('hwchecks') 'A') -ne (& $k @('hwchecks', 'telemetry') 'A') -and (& $k @('hwchecks') 'A') -match '^install-[0-9a-f]{16}\.wim$') 'Image cache: reused when only Unattended changes, new when patches change'
+    Assert ((& $k @('hwchecks') 'A') -ne (Get-ImageCacheKey @{ Patches = @('hwchecks'); QuickCompress = $true; PatchMode = 'Setup' } $src)) 'Image cache: patch mode is part of the key'
     Assert ((Get-IsoLabel '99cfb89') -eq 'W11U_99CFB89' -and (Get-IsoLabel '') -eq 'W11U_DEV' -and (Get-IsoLabel 'a b-c!') -eq 'W11U_ABC') 'ISO label: W11U_<version>, safe characters only'
     $t = Get-IsoInfoText @{ ToolVersion = '99cfb89'; Editions = @('Windows 11 Pro'); BaseLang = 'de-de'; Patches = @('hwchecks')
         Unattend = @{ Enabled = $true; AutoInstall = 'BestSsd'; Apps = @('Valve.Steam'); Password = 'secret1'; ProductKey = 'AAAAA-BBBBB-CCCCC-DDDDD-EEEEE' } }

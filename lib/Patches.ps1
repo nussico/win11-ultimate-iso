@@ -170,14 +170,14 @@ $Patches = [ordered]@{
         Action = { param($m, $c)
             # The release the build was made from; the image's own DisplayVersion is older in Fast-mode UUP ISOs.
             $v = $c.ReleaseVersion
-            Mount-Hive SOFTWARE "$m\Windows\System32\config\SOFTWARE"
+            if (-not $Online) { Mount-Hive SOFTWARE "$m\Windows\System32\config\SOFTWARE" }
             try {
-                if (-not $v) { $v = Get-ItemPropertyValue 'HKLM:\WIM_SOFTWARE\Microsoft\Windows NT\CurrentVersion' DisplayVersion }
+                if (-not $v) { $v = Get-ItemPropertyValue "Registry::$(Convert-RegPath 'SOFTWARE\Microsoft\Windows NT\CurrentVersion')" DisplayVersion }
                 if ($v -notmatch '^\d\dH\d$') { Write-Log "  WARN version not pinned: unknown version '$v'"; return }
                 Write-Log "  pin Windows version $v"
                 Set-OfflineReg ('TargetReleaseVersion|1', 'ProductVersion|sz:Windows 11', "TargetReleaseVersionInfo|sz:$v" |
                     ForEach-Object { "SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate|$_" })
-            } finally { Dismount-Hives } } }
+            } finally { if (-not $Online) { Dismount-Hives } } } }
 
     wsl          = @{ Group = 'Features'; Label = 'WSL (Linux)'
         Desc = 'Turns on the Windows features WSL needs. After setup run "wsl --install" to get Ubuntu or another Linux.'
@@ -190,7 +190,7 @@ $Patches = [ordered]@{
         Action = { param($m, $c) Enable-ImageFeature $m 'Containers-DisposableClientVM' } }
     netfx3       = @{ Group = 'Features'; Label = '.NET Framework 3.5'
         Desc = 'Older programs and games need it. Installed from the ISO, so no download after setup.'
-        Action = { param($m, $c) Enable-ImageFeature $m 'NetFx3' "$(Split-Path $m)\iso\sources\sxs" } }
+        Action = { param($m, $c) Enable-ImageFeature $m 'NetFx3' $(if ($c.SxsPath) { $c.SxsPath } else { "$(Split-Path $m)\iso\sources\sxs" }) } }
 
     gamedvr      = @{ Group = 'Gaming'; Label = 'Disable background recording'
         Desc = 'Stops Game DVR from recording gameplay in the background (saves FPS). Game Bar itself stays.'; Reg = @(
@@ -227,12 +227,15 @@ $Patches = [ordered]@{
         Desc = 'Removes Recall (screenshots of your activity) and turns off AI data analysis.'; Reg = @(
             'SOFTWARE\Policies\Microsoft\Windows\WindowsAI|DisableAIDataAnalysis|1')
         Action = { param($m, $c)
-            if (Get-WindowsOptionalFeature -Path $m | Where-Object FeatureName -eq 'Recall') {
-                Disable-WindowsOptionalFeature -Path $m -FeatureName Recall -Remove | Out-Null } } }
+            $ia = Get-ImageArg $m
+            if (Get-WindowsOptionalFeature @ia | Where-Object FeatureName -eq 'Recall') {
+                Disable-WindowsOptionalFeature @ia -FeatureName Recall -Remove -NoRestart | Out-Null } } }
 
     drivers      = @{ Group = 'Extras'; Label = 'Add drivers from folder'
         Desc = 'Adds every driver in the folder below, e.g. network or storage drivers setup does not have.'
-        Action = { param($m, $c) Add-WindowsDriver -Path $m -Driver $c.DriversPath -Recurse | Out-Null } }
+        Action = { param($m, $c)
+            if ($Online) { $ErrorActionPreference = 'Continue'; pnputil /add-driver "$($c.DriversPath)\*.inf" /subdirs /install 2>&1 | Out-Null; Write-Log "  pnputil exit $LASTEXITCODE" }
+            else { Add-WindowsDriver -Path $m -Driver $c.DriversPath -Recurse | Out-Null } } }
     winutil      = @{ Group = 'Extras'; Label = 'CTT WinUtil shortcut on desktop'
         Desc = 'Puts a Chris Titus Tech WinUtil shortcut on the desktop for more tweaks after setup.'
         Action = { param($m, $c)
@@ -259,7 +262,7 @@ $Presets = [ordered]@{
 # Preset file (Save/Load in the top bar): an allowlist of choices, so no password, product key or PC-specific paths.
 function Get-PresetData($Cfg) {
     $p = [ordered]@{}
-    foreach ($k in 'BaseLang', 'Editions', 'Patches', 'UseUup', 'Newest', 'Fast', 'Split', 'QuickCompress', 'DefenderExclude') { $p[$k] = $Cfg[$k] }
+    foreach ($k in 'BaseLang', 'Editions', 'Patches', 'PatchMode', 'UseUup', 'Newest', 'Fast', 'Split', 'QuickCompress', 'DefenderExclude') { $p[$k] = $Cfg[$k] }
     $u = [ordered]@{}
     foreach ($k in 'Enabled', 'UserName', 'AutoLogon', 'Admin', 'ComputerName', 'TimeZone', 'Keyboard', 'Locale', 'SkipOobe', 'Edition', 'AutoInstall', 'RunWinUtil', 'EnableAdmin', 'Apps', 'WifiName') { $u[$k] = $Cfg.Unattend[$k] }
     $p.Unattend = $u; $p
@@ -272,18 +275,26 @@ function Get-AppsToRemove([string[]]$Provisioned, [string[]]$Wanted) {
     @($Wanted | Where-Object { $_ -in $Provisioned -and -not (Test-ProtectedApp $_) })
 }
 
+# Where patches write. In the build: an offline image, hives loaded as HKLM\WIM_SYSTEM etc. During Windows Setup
+# ($Online, set by New-SetupPatchScript): the running system, only the default user's hive is loaded.
+$Online = $false
+
 function Convert-RegPath($Path) {
     $hive, $rest = $Path -split '\\', 2
-    "HKLM\WIM_$hive\$rest"
+    if ($Online -and $hive -ne 'DEFAULT') { "HKLM\$hive\$rest" } else { "HKLM\WIM_$hive\$rest" }
 }
 
+# DISM cmdlet target: the mounted image or the running Windows.
+function Get-ImageArg($Mount) { if ($Online) { @{ Online = $true } } else { @{ Path = $Mount } } }
+
 function Remove-Apps($Mount, [string[]]$Wanted) {
-    $prov = Get-AppxProvisionedPackage -Path $Mount
+    $ia = Get-ImageArg $Mount
+    $prov = Get-AppxProvisionedPackage @ia
     foreach ($w in $Wanted | Where-Object { Test-ProtectedApp $_ }) { Write-Log "  skip protected app $w" }
     foreach ($name in Get-AppsToRemove $prov.DisplayName $Wanted) {
         $prov | Where-Object DisplayName -eq $name | ForEach-Object {
             Write-Log "  remove app $name"
-            Remove-AppxProvisionedPackage -Path $Mount -PackageName $_.PackageName | Out-Null
+            Remove-AppxProvisionedPackage @ia -PackageName $_.PackageName | Out-Null
             if ($script:Report) { $script:Report.Apps++ }
         }
     }
@@ -291,11 +302,14 @@ function Remove-Apps($Mount, [string[]]$Wanted) {
 
 # Optional features the edition doesn't have (Hyper-V on Home) are skipped. A failed feature only warns: not worth a whole build.
 function Enable-ImageFeature($Mount, [string[]]$Names, $Source) {
-    $have = @(Get-WindowsOptionalFeature -Path $Mount).FeatureName
+    $ia = Get-ImageArg $Mount
+    # Asking DISM for the list takes ~10 s: once per image (Invoke-Patches resets it).
+    if ($null -eq $script:FeatureNames) { $script:FeatureNames = @(Get-WindowsOptionalFeature @ia).FeatureName }
+    $have = $script:FeatureNames
     foreach ($n in $Names) {
         if ($n -notin $have) { Write-Log "  skip feature $n (not in this edition)"; continue }
         $src = if ($Source) { @{ Source = $Source; LimitAccess = $true } } else { @{} }
-        try { Enable-WindowsOptionalFeature -Path $Mount -FeatureName $n -All @src -ErrorAction Stop | Out-Null; Write-Log "  enable feature $n" }
+        try { Enable-WindowsOptionalFeature @ia -FeatureName $n -All -NoRestart @src -ErrorAction Stop | Out-Null; Write-Log "  enable feature $n" }
         catch { Write-Log "  WARN could not enable ${n}: $($_.Exception.Message)" }
     }
 }
@@ -326,6 +340,7 @@ function Mount-Hive($Name, $File) {
 }
 
 function Mount-Hives($Mount) {
+    if ($Online) { Mount-Hive DEFAULT "$Mount\Users\Default\NTUSER.DAT"; return }
     Mount-Hive SYSTEM "$Mount\Windows\System32\config\SYSTEM"
     Mount-Hive SOFTWARE "$Mount\Windows\System32\config\SOFTWARE"
     Mount-Hive DEFAULT "$Mount\Users\Default\NTUSER.DAT"
@@ -357,13 +372,37 @@ function Set-OfflineReg([string[]]$Entries) {
 function Get-PatchReg([string[]]$Ids) { @($Ids | ForEach-Object { $Patches[$_].Reg } | Where-Object { $_ }) }
 
 function Invoke-Patches($Mount, [string[]]$Ids, $Cfg) {
+    $script:FeatureNames = $null   # new image, other edition
     foreach ($id in 'bloatapps', 'xboxapp' | Where-Object { $_ -in $Ids }) { Write-Log " patch $id - $($Patches[$id].Label)"; & $Patches[$id].Action $Mount $Cfg }
-    Write-Log " registry: $(($Ids | Where-Object { $Patches[$_].Reg }) -join ', ')"
+    $regIds = @($Ids | Where-Object { $Patches[$_].Reg }); if ($regIds) { Write-Log " registry: $($regIds -join ', ')" }
     Mount-Hives $Mount
     try { Set-OfflineReg (Get-PatchReg $Ids) } finally { Dismount-Hives }
     foreach ($id in $Ids | Where-Object { $_ -notin 'bloatapps', 'xboxapp' -and $Patches[$_].Action }) {
         Write-Log " patch $id - $($Patches[$id].Label)"; & $Patches[$id].Action $Mount $Cfg
     }
+}
+
+# "During setup" mode: this script and Patches.ps1 go to C:\Windows\Setup\Scripts; autounattend.xml runs it in the
+# specialize pass as SYSTEM, before OOBE and before any user profile exists, so it reaches every user like the image
+# patches do. One failed patch only logs: Setup must never stop because of a tweak.
+function New-SetupPatchScript([string[]]$Ids, $Cfg) {
+    $q = { param($s) "'" + "$s".Replace("'", "''") + "'" }
+    $ids = ($Ids | ForEach-Object { & $q $_ }) -join ', '
+    @"
+`$dir = 'C:\Windows\Setup\Scripts'
+`$ProgressPreference = 'SilentlyContinue'
+function Write-Log(`$Msg) { Add-Content "`$dir\Win11Ultimate-patches.log" ('[{0:HH:mm:ss}] {1}' -f (Get-Date), `$Msg) }
+Write-Log 'Win11 Ultimate patches (during setup) started'
+. "`$dir\Patches.ps1"
+`$Online = `$true
+`$ErrorActionPreference = 'Stop'
+`$cfg = @{ ReleaseVersion = $(& $q $Cfg.ReleaseVersion); DriversPath = "`$dir\drivers"; SxsPath = "`$dir\sxs" }
+foreach (`$id in @($ids)) {
+    try { Invoke-Patches `$env:SystemDrive @(`$id) `$cfg } catch { Write-Log "  WARN `$id failed: `$_" }
+}
+Remove-Item "`$dir\sxs", "`$dir\drivers" -Recurse -Force -ErrorAction SilentlyContinue
+Write-Log 'done'
+"@
 }
 
 # boot.wim only gets the hardware-check bypass (SYSTEM hive only).
