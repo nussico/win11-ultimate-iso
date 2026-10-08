@@ -878,7 +878,7 @@ $win.Add_Closing({
         if ($script:scanning) { $e.Cancel = $true; Show-Msg 'Scanning your ISOs. Close again in a moment.' | Out-Null; return }
     })
 
-$ui.Preset.SelectedItem = 'Recommended'
+$ui.Preset.SelectedItem = 'Basic'
 Update-Editions
 $win.Add_ContentRendered({ Invoke-Scan })
 $win.ShowDialog() | Out-Null
