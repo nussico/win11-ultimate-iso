@@ -57,7 +57,7 @@ The user is an IT apprentice and gamer. Answer in short, plain English.
 1. Read the code first and reuse existing helpers. Make the smallest correct change, fixed at the root.
 2. Verify before saying done:
    - parse: `[Management.Automation.Language.Parser]::ParseFile(...)`
-   - `powershell -NoProfile -File tests\SelfTest.ps1` (add a check for new logic)
+   - `powershell -NoProfile -File tests\Check.ps1` (CI runs the same; add SelfTest checks for new logic)
    - XAML: `[xml](Get-Content lib\Window.xaml -Raw)`. For UI changes, run the GUI non-elevated with self-elevation patched out and take a RenderTargetBitmap screenshot.
    - Real builds and UAC need admin; say clearly what was not tested.
 3. Commit with a clear message; push to `main` when the user wants it shipped, then tell them to rerun the install line.

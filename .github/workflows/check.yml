@@ -1,0 +1,12 @@
+# The builder's update check looks for this job's result ("selftest") and only offers commits that passed.
+name: Check
+on: [push, pull_request]
+jobs:
+  selftest:
+    name: selftest
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse, ASCII, XAML and self-tests
+        shell: powershell
+        run: .\tests\Check.ps1

@@ -132,7 +132,8 @@ function Start-Update {
     # Closing mid-scan is refused (an ISO would stay mounted) while the installer already runs: update when the scan ends.
     if ($script:scanning) { $script:updateAfterScan = $true; $ui.ScanResult.Text = 'Scanning your ISOs... the builder updates when done.'; return }
     $env:W11UB_DIR = $root   # installer updates this folder instead of asking for a drive
-    Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"Start-Sleep 2; irm https://raw.githubusercontent.com/$repo/main/install.ps1 | iex`""
+    $env:W11UB_SHA = $script:update.Latest   # exactly the commit that passed CI, not whatever main is by now
+    Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"Start-Sleep 2; irm https://raw.githubusercontent.com/$repo/$($script:update.Latest)/install.ps1 | iex`""
     $win.Close()
 }
 # Popup once per new version (update-skip.txt remembers a "No"); the Update button stays either way.
@@ -148,6 +149,9 @@ Start-Background {
     $have = (Get-Content "$root\version.txt" -ErrorAction Stop).Trim()
     $latest = (Invoke-RestMethod "https://api.github.com/repos/$repo/commits/main" -Headers @{ Accept = 'application/vnd.github.sha' } -TimeoutSec 5).Trim()
     if (-not $latest -or $latest -eq $have) { return }
+    # Only offer commits whose CI check passed (.github/workflows/check.yml): a broken push never reaches anyone
+    $runs = (Invoke-RestMethod "https://api.github.com/repos/$repo/commits/$latest/check-runs?check_name=selftest" -TimeoutSec 5).check_runs
+    if (-not @($runs | Where-Object conclusion -eq 'success')) { return }
     # Commit titles since the installed version, newest first (unknown base e.g. after a force push: no list)
     $news = try { $c = Invoke-RestMethod "https://api.github.com/repos/$repo/compare/$have...$latest" -TimeoutSec 5; [array]::Reverse($c.commits); @($c.commits | ForEach-Object { ($_.commit.message -split "`n")[0] }) } catch { @() }
     [pscustomobject]@{ Latest = $latest; News = $news }   # not a hashtable: $out[0] on one would look up key 0

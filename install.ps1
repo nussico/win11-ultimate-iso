@@ -68,8 +68,10 @@
     }
     Write-Host "Installing to $dir" -ForegroundColor Cyan
 
-    # Pin the download to the newest commit so version.txt matches it (the builder compares it to offer updates).
-    $sha = try { (Invoke-RestMethod "https://api.github.com/repos/$repo/commits/main" -Headers @{ Accept = 'application/vnd.github.sha' }).Trim() } catch { 'main' }
+    # Pin the download to one commit so version.txt matches it (the builder compares it to offer updates).
+    # The builder's Update passes the commit that passed CI; a fresh install takes the newest one.
+    $sha = if ($env:W11UB_SHA -match '^[0-9a-f]{40}$') { $env:W11UB_SHA }
+    else { try { (Invoke-RestMethod "https://api.github.com/repos/$repo/commits/main" -Headers @{ Accept = 'application/vnd.github.sha' }).Trim() } catch { 'main' } }
     $zip = Join-Path $env:TEMP 'w11ub.zip'; $tmp = Join-Path $env:TEMP 'w11ub'
     Invoke-WebRequest "https://github.com/$repo/archive/$sha.zip" -OutFile $zip -UseBasicParsing
     if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }

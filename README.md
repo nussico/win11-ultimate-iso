@@ -59,7 +59,7 @@ The first build installs the Windows ADK *Deployment Tools* via winget.
 ## For developers
 
 ```powershell
-powershell -File tests\SelfTest.ps1      # logic checks, no admin
+powershell -File tests\Check.ps1         # what CI runs: parse, ASCII, XAML + logic checks, no admin
 powershell -File tests\Test-Build.ps1    # checks out\Win11.iso (admin)
 ```
 
