@@ -470,24 +470,24 @@ function Add-PlanNotice($Text, $Color) {
                 Child = $tb; BorderBrush = $Color; BorderThickness = '3,0,0,0'; Padding = '10,6'; Margin = '0,0,0,10'; Background = $brush.Dark })) | Out-Null
 }
 function New-PlanStat($Value, $Caption, $Color) {
-    $sp = New-Object Windows.Controls.StackPanel -Property @{ Margin = '0,0,32,0' }
+    $sp = New-Object Windows.Controls.StackPanel -Property @{ Margin = '0,0,0,14' }
     $sp.Children.Add((New-Object Windows.Controls.TextBlock -Property @{ Text = $Value; FontSize = 22; FontWeight = 'SemiBold'; Foreground = $Color })) | Out-Null
     $sp.Children.Add((New-Object Windows.Controls.TextBlock -Property @{ Text = $Caption; FontSize = 12; Foreground = $brush.Muted })) | Out-Null
     $sp
 }
 function Add-PlanRow($Label, $Value, $Hint) {
-    $row = New-Object Windows.Controls.DockPanel -Property @{ Margin = '0,0,0,7' }
+    $row = New-Object Windows.Controls.DockPanel -Property @{ Margin = '0,0,0,8' }
     $l = New-Object Windows.Controls.TextBlock -Property @{ Text = $Label; Width = 90; Foreground = $brush.Muted }
     [Windows.Controls.DockPanel]::SetDock($l, 'Left'); $row.Children.Add($l) | Out-Null
     $v = New-Object Windows.Controls.TextBlock -Property @{ TextWrapping = 'Wrap'; Foreground = $brush.Text }
     $v.Inlines.Add((New-Object Windows.Documents.Run $Value)) | Out-Null
     if ($Hint) { $v.Inlines.Add((New-Object Windows.Documents.Run "  $Hint" -Property @{ Foreground = $brush.Muted; FontSize = 12 })) | Out-Null }
     $row.Children.Add($v) | Out-Null
-    $ui.PlanPanel.Children.Add($row) | Out-Null
+    $ui.PlanRows.Children.Add($row) | Out-Null
 }
 
 function Update-Plan {
-    $ui.PlanPanel.Children.Clear()
+    foreach ($c in $ui.PlanPanel, $ui.PlanRows, $ui.PlanStats) { $c.Children.Clear() }
     try {
         $cfg = Get-Config
         if (-not $cfg.Editions) { Add-PlanNotice 'Pick at least one edition on the Source page.' $brush.Warn; return }
@@ -507,16 +507,14 @@ function Update-Plan {
         $script:planMinutes = $min
         $need = Get-NeededGB $cached; $free = [math]::Round((Get-PSDrive $root.Substring(0, 1)).Free / 1GB)
 
-        $stats = New-Object Windows.Controls.StackPanel -Property @{ Orientation = 'Horizontal'; Margin = '0,2,0,14' }
-        $how = 'build time, ' + $(if ($cached) { 'reuses your last build' } elseif ($t.Measured -contains $script:planKey) { 'measured on this PC' } else { 'estimate' })
-        $stats.Children.Add((New-PlanStat "~$min min" $how $brush.Text)) | Out-Null
-        $stats.Children.Add((New-PlanStat "$need GB" "disk space on $($root.Substring(0, 2)), $free GB free" $(if ($free -lt $need) { $brush.Danger } else { $brush.Text }))) | Out-Null
-        $ui.PlanPanel.Children.Add($stats) | Out-Null
+        $how = $(if ($cached) { 'reuses your last build' } elseif ($t.Measured -contains $script:planKey) { 'measured on this PC' } else { 'estimate' })
+        $ui.PlanStats.Children.Add((New-PlanStat "~$min min" "build time, $how" $brush.Text)) | Out-Null
+        $ui.PlanStats.Children.Add((New-PlanStat "$need GB" "disk space, $free GB free on $($root.Substring(0, 2))" $(if ($free -lt $need) { $brush.Danger } else { $brush.Text }))) | Out-Null
         if ($free -lt $need) { Add-PlanNotice "Not enough disk space: free up $($need - $free) GB on $($root.Substring(0, 2))." $brush.Danger }
 
         if ($p.Base) { Add-PlanRow 'Windows' "Your ISO, build $($p.Base.Build)" (Split-Path $p.Base.Path -Leaf) }
         if ($p.Missing -and $p.Uup) {
-            Add-PlanRow 'Windows' "$($p.Uup.title)" $(if ($cfg.Fast) { 'download, fast mode: base build, updates after setup' } else { 'download incl. the latest update' })
+            Add-PlanRow 'Windows' "$($p.Uup.title)" $(if ($cfg.Fast) { 'download, fast mode (updates install after setup)' } else { 'download incl. the latest update' })
         }
         Add-PlanRow 'Editions' ($cfg.Editions -join ', ')
         Add-PlanRow 'Language' $cfg.BaseLang
@@ -634,7 +632,7 @@ for ($i = 1; $i -le 9; $i++) {
     [Windows.Controls.DockPanel]::SetDock($rail, 'Left')
     $time = New-Object Windows.Controls.TextBlock -Property @{ FontSize = 11; Margin = '8,2,0,0'; Foreground = $brush.Muted }
     [Windows.Controls.DockPanel]::SetDock($time, 'Right')
-    $name = New-Object Windows.Controls.TextBlock -Property @{ Text = $steps[$i - 1].Name; Margin = '10,1,0,12'; TextTrimming = 'CharacterEllipsis'; TextWrapping = 'NoWrap' }
+    $name = New-Object Windows.Controls.TextBlock -Property @{ Text = $steps[$i - 1].Name; Margin = '10,1,0,6'; TextTrimming = 'CharacterEllipsis'; TextWrapping = 'NoWrap' }
     foreach ($c in $rail, $time, $name) { $row.Children.Add($c) | Out-Null }
     $ui.StepList.Children.Add($row) | Out-Null
     $script:stepRows += @{ N = $i; Line = $line; Halo = $halo; Scale = $scale; Dot = $dot; Mark = $mark; Name = $name; Time = $time }

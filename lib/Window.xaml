@@ -366,14 +366,17 @@
       <!-- Build -->
       <Grid x:Name="PageBuild" Style="{StaticResource Page}" Visibility="Collapsed" Margin="36,30,36,30">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-        <StackPanel><TextBlock Text="Build" Style="{StaticResource H1}"/>
-          <TextBlock Text="Check the plan, then build. The log shows every step." Style="{StaticResource Sub}"/></StackPanel>
+        <TextBlock Text="Build" Style="{StaticResource H1}" Margin="0,0,0,16"/>
         <Grid Grid.Row="1">
           <Grid.ColumnDefinitions><ColumnDefinition Width="3*"/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
           <Border Style="{StaticResource Card}" Margin="0,0,14,14"><StackPanel>
             <TextBlock Text="PLAN" Style="{StaticResource Section}"/>
-            <!-- Filled by Update-Plan: notices, time + disk, then one row per decision -->
+            <!-- Filled by Update-Plan: notices on top, one row per decision, time + disk on the right -->
             <StackPanel x:Name="PlanPanel"/>
+            <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+              <StackPanel x:Name="PlanRows"/>
+              <Border Grid.Column="1" BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0" Padding="20,0,4,0" Margin="16,0,0,0">
+                <StackPanel x:Name="PlanStats"/></Border></Grid>
           </StackPanel></Border>
           <Border Grid.Column="1" Style="{StaticResource Card}"><StackPanel>
             <TextBlock Text="OUTPUT" Style="{StaticResource Section}"/>
@@ -415,14 +418,13 @@
               <FlowDocument/></RichTextBox>
           </Border>
         </Grid>
-        <Border Grid.Row="4" Style="{StaticResource Card}" Margin="0,14,0,0"><StackPanel>
-          <TextBlock Text="TEST &amp; STORAGE" Style="{StaticResource Section}"/>
+        <!-- Test & storage: one slim line -->
+        <Border Grid.Row="4" Style="{StaticResource Card}" Margin="0,14,0,0" Padding="18,8">
           <DockPanel>
             <Button x:Name="CleanUp" DockPanel.Dock="Right" Content="Clean up" ToolTip="Delete temporary build files and outdated downloads"/>
             <Button x:Name="RemoveVm" DockPanel.Dock="Right" Content="Remove VM" Margin="0,0,10,0" ToolTip="Delete the test VM and its virtual disk"/>
             <Button x:Name="TestVm" DockPanel.Dock="Right" Content="Test in VM" Margin="0,0,10,0" ToolTip="Boot the built ISO in a Hyper-V virtual machine"/>
-            <TextBlock x:Name="StorageText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{StaticResource Muted}"/></DockPanel>
-        </StackPanel></Border>
+            <TextBlock x:Name="StorageText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{StaticResource Muted}"/></DockPanel></Border>
       </Grid>
 
       <!-- Info -->

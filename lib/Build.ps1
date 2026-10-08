@@ -132,6 +132,16 @@ function Remove-DefenderExclusion {
     $script:DefenderExcluded = $null
 }
 
+# Windows Search would index the files DISM unpacks. Marked folders pass "don't index" on to everything created inside.
+function Disable-Indexing([string[]]$Paths) {
+    foreach ($p in $Paths | Where-Object { $_ }) {
+        try {
+            New-Item -ItemType Directory -Force $p | Out-Null
+            $d = Get-Item $p -Force; $d.Attributes = $d.Attributes -bor [IO.FileAttributes]::NotContentIndexed
+        } catch { Write-Log "NOTE: could not turn off indexing for $p ($_)" }
+    }
+}
+
 function Invoke-Build($Cfg, $Sync) {
     $script:BuildSync = $Sync
     $ErrorActionPreference = 'Stop'
@@ -156,7 +166,9 @@ function Invoke-Build($Cfg, $Sync) {
             try { Remove-Item $w -Recurse -Force -ErrorAction Stop } catch { Remove-ImagePath $w }
             if (Test-Path $w) { throw "Could not delete the old work folder $w. Restart the PC and try again." }
         }
+        Disable-Indexing $w, $Cfg.CacheDir   # before the subfolders, so they inherit it
         foreach ($d in 'iso', 'mount', 'uup') { New-Item -ItemType Directory -Force "$w\$d" | Out-Null }
+        Write-Log 'Search indexing off for the work and cache folders'
         if ($Cfg.DefenderExclude) { Add-DefenderExclusion $w }
         $oscdimg = Get-Oscdimg
 
