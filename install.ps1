@@ -69,9 +69,15 @@
     Write-Host "Installing to $dir" -ForegroundColor Cyan
 
     # Pin the download to one commit so version.txt matches it (the builder compares it to offer updates).
-    # The builder's Update passes the commit that passed CI; a fresh install takes the newest one.
-    $sha = if ($env:W11UB_SHA -match '^[0-9a-f]{40}$') { $env:W11UB_SHA }
-    else { try { (Invoke-RestMethod "https://api.github.com/repos/$repo/commits/main" -Headers @{ Accept = 'application/vnd.github.sha' }).Trim() } catch { 'main' } }
+    # The builder's Update passes the commit that passed CI; a fresh install looks for the newest one that passed
+    # (.github/workflows/check.yml). Offline, rate-limited or none passed yet: the newest commit, as before.
+    $sha = $env:W11UB_SHA
+    if ($sha -notmatch '^[0-9a-f]{40}$') {
+        $sha = try { @((Invoke-RestMethod "https://api.github.com/repos/$repo/actions/workflows/check.yml/runs?branch=main&event=push&status=success&per_page=1").workflow_runs)[0].head_sha } catch { $null }
+        if ($sha -notmatch '^[0-9a-f]{40}$') {
+            $sha = try { (Invoke-RestMethod "https://api.github.com/repos/$repo/commits/main" -Headers @{ Accept = 'application/vnd.github.sha' }).Trim() } catch { 'main' }
+        }
+    }
     $zip = Join-Path $env:TEMP 'w11ub.zip'; $tmp = Join-Path $env:TEMP 'w11ub'
     Invoke-WebRequest "https://github.com/$repo/archive/$sha.zip" -OutFile $zip -UseBasicParsing
     if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
