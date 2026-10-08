@@ -34,6 +34,14 @@ $script:logged = ''; Remove-ImagePath "$tmp\file.exe"; Remove-ImagePath "$tmp\di
 Assert (-not (Test-Path "$tmp\file.exe") -and -not (Test-Path "$tmp\dir") -and $script:logged -notmatch 'not a valid directory') 'Remove-ImagePath: single file and folder'
 Remove-Item $tmp -Recurse -Force
 
+# Features: missing ones skipped (Home), a failure only warns, the source reaches DISM
+Assert ('pinversion' -notin $Presets.Extreme.Patches -and -not ($Presets.Extreme.Patches | Where-Object { $Patches[$_].Group -eq 'Features' })) 'Extreme skips features and the version pin'
+function Get-WindowsOptionalFeature { @([pscustomobject]@{ FeatureName = 'NetFx3' }, [pscustomobject]@{ FeatureName = 'Bad' }) }
+function Enable-WindowsOptionalFeature { param($Path, $FeatureName, [switch]$All, $Source, [switch]$LimitAccess); if ($FeatureName -eq 'Bad') { throw 'boom' }; $script:logged += "src=$Source`n" }
+$script:logged = ''; Enable-ImageFeature 'X:\mount' 'Microsoft-Hyper-V-All', 'Bad', 'NetFx3' 'X:\iso\sources\sxs'
+Assert ($script:logged -match 'skip feature Microsoft-Hyper-V-All' -and $script:logged -match 'WARN could not enable Bad' -and $script:logged -match 'src=X:\\iso\\sources\\sxs' -and $script:logged -match 'enable feature NetFx3') 'Enable-ImageFeature: skip, warn, source'
+Remove-Item function:Get-WindowsOptionalFeature, function:Enable-WindowsOptionalFeature
+
 # Unattend
 $u = @{ UserName = 'User'; Password = 'p<w'; Admin = $true; AutoLogon = $true; ComputerName = ''; TimeZone = 'W. Europe Standard Time'
     Keyboard = 'de-DE'; Locale = 'de-DE'; SkipOobe = $true; Edition = 'Windows 11 Pro'; AutoInstall = 'Off'; RunWinUtil = $true; CustomScript = ''; EnableAdmin = $false }

@@ -141,6 +141,9 @@ $Patches = [ordered]@{
         Desc = 'No hiberfil.sys, which frees several GB on the system drive. Also turns off Fast Startup. Sleep still works.'; Reg = @(
             'SYSTEM\ControlSet001\Control\Power|HibernateEnabled|0',
             'SYSTEM\ControlSet001\Control\Power|HibernateEnabledDefault|0') }
+    noreserve    = @{ Group = 'System'; Label = 'No reserved storage'
+        Desc = 'Windows no longer keeps about 7 GB of the system drive free for updates. Updates still work; with a nearly full drive they may need space freed first.'; Reg = @(
+            'SOFTWARE\Microsoft\Windows\CurrentVersion\ReserveManager|ShippedWithReserves|0') }
     longpaths    = @{ Group = 'System'; Label = 'Allow long file paths'
         Desc = 'Removes the old 260 character limit for file paths. Helps with deep folders, games mods and dev tools.'; Reg = @(
             'SYSTEM\ControlSet001\Control\FileSystem|LongPathsEnabled|1') }
@@ -161,6 +164,32 @@ $Patches = [ordered]@{
     noautoreboot = @{ Group = 'Updates'; Label = 'No automatic restart'
         Desc = 'Windows does not restart by itself for updates while you are logged in, e.g. during a game or download.'; Reg = @(
             'SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU|NoAutoRebootWithLoggedOnUsers|1') }
+    pinversion   = @{ Group = 'Updates'; Label = 'Stay on this Windows version'
+        Desc = 'Windows Update keeps installing security updates but never moves to the next version (e.g. 25H2 to 26H2). Delete the TargetReleaseVersion policy later to upgrade.'
+        Action = { param($m, $c)
+            # The release the build was made from; the image's own DisplayVersion is older in Fast-mode UUP ISOs.
+            $v = $c.ReleaseVersion
+            Mount-Hive SOFTWARE "$m\Windows\System32\config\SOFTWARE"
+            try {
+                if (-not $v) { $v = Get-ItemPropertyValue 'HKLM:\WIM_SOFTWARE\Microsoft\Windows NT\CurrentVersion' DisplayVersion }
+                if ($v -notmatch '^\d\dH\d$') { Write-Log "  WARN version not pinned: unknown version '$v'"; return }
+                Write-Log "  pin Windows version $v"
+                Set-OfflineReg ('TargetReleaseVersion|1', 'ProductVersion|sz:Windows 11', "TargetReleaseVersionInfo|sz:$v" |
+                    ForEach-Object { "SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate|$_" })
+            } finally { Dismount-Hives } } }
+
+    wsl          = @{ Group = 'Features'; Label = 'WSL (Linux)'
+        Desc = 'Turns on the Windows features WSL needs. After setup run "wsl --install" to get Ubuntu or another Linux.'
+        Action = { param($m, $c) Enable-ImageFeature $m 'Microsoft-Windows-Subsystem-Linux', 'VirtualMachinePlatform' } }
+    hyperv       = @{ Group = 'Features'; Label = 'Hyper-V'
+        Desc = 'Virtual machines built into Windows. Pro, Education and Enterprise only; Home is skipped. Some other VM apps and anti-cheats run slower with it.'
+        Action = { param($m, $c) Enable-ImageFeature $m 'Microsoft-Hyper-V-All' } }
+    sandbox      = @{ Group = 'Features'; Label = 'Windows Sandbox'
+        Desc = 'A throwaway Windows window for testing unknown programs; everything is gone when you close it. Pro, Education and Enterprise only.'
+        Action = { param($m, $c) Enable-ImageFeature $m 'Containers-DisposableClientVM' } }
+    netfx3       = @{ Group = 'Features'; Label = '.NET Framework 3.5'
+        Desc = 'Older programs and games need it. Installed from the ISO, so no download after setup.'
+        Action = { param($m, $c) Enable-ImageFeature $m 'NetFx3' "$(Split-Path $m)\iso\sources\sxs" } }
 
     gamedvr      = @{ Group = 'Gaming'; Label = 'Disable background recording'
         Desc = 'Stops Game DVR from recording gameplay in the background (saves FPS). Game Bar itself stays.'; Reg = @(
@@ -221,7 +250,8 @@ $Presets = [ordered]@{
     Recommended = @{ Patches = @('hwchecks', 'localaccount', 'skipprivacy', 'nobitlocker', 'bloatapps', 'telemetry', 'adscopilot', 'onedrive', 'activity', 'adid', 'nop2p', 'fileext', 'endtask', 'nobing', 'gamedvr', 'notyping', 'notailored', 'noautoreboot') }
     CTT         = @{ Patches = @('hwchecks', 'localaccount', 'skipprivacy', 'nobitlocker', 'bloatapps', 'telemetry', 'adscopilot', 'onedrive', 'services', 'winutil') + $CttTweaks
         Unattend = @{ Enabled = $true; SkipOobe = $true; RunWinUtil = $true } }
-    Extreme     = @{ Patches = @($Patches.Keys | Where-Object { $_ -ne 'drivers' })
+    # Everything that removes or disables; not the opt-in extras, features or the version pin.
+    Extreme     = @{ Patches = @($Patches.Keys | Where-Object { $_ -ne 'drivers' -and $_ -ne 'pinversion' -and $Patches[$_].Group -ne 'Features' })
         Unattend = @{ Enabled = $true; SkipOobe = $true; RunWinUtil = $true } }
 }
 
@@ -255,6 +285,17 @@ function Remove-Apps($Mount, [string[]]$Wanted) {
             Remove-AppxProvisionedPackage -Path $Mount -PackageName $_.PackageName | Out-Null
             if ($script:Report) { $script:Report.Apps++ }
         }
+    }
+}
+
+# Optional features the edition doesn't have (Hyper-V on Home) are skipped. A failed feature only warns: not worth a whole build.
+function Enable-ImageFeature($Mount, [string[]]$Names, $Source) {
+    $have = @(Get-WindowsOptionalFeature -Path $Mount).FeatureName
+    foreach ($n in $Names) {
+        if ($n -notin $have) { Write-Log "  skip feature $n (not in this edition)"; continue }
+        $src = if ($Source) { @{ Source = $Source; LimitAccess = $true } } else { @{} }
+        try { Enable-WindowsOptionalFeature -Path $Mount -FeatureName $n -All @src -ErrorAction Stop | Out-Null; Write-Log "  enable feature $n" }
+        catch { Write-Log "  WARN could not enable ${n}: $($_.Exception.Message)" }
     }
 }
 

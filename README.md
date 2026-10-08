@@ -45,7 +45,7 @@ Every ISO is named `W11U_<version>` and contains `Win11Ultimate.txt` (what was b
 | Basic | setup bypasses |
 | Recommended | + debloat (keeps the Xbox app), OneDrive, privacy, file extensions, End task, no auto-restart, no background recording |
 | CTT | + CTT's UI tweaks, services to manual, runs WinUtil after setup |
-| Extreme | everything, incl. removing Edge, Defender, Recall and the Xbox app |
+| Extreme | everything that removes or disables, incl. Edge, Defender, Recall and the Xbox app (features and the version pin stay opt-in) |
 
 ## Requirements
 

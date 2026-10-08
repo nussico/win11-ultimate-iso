@@ -176,7 +176,8 @@ function Invoke-Build($Cfg, $Sync) {
         $found = @(Get-SourceIsos $Cfg.IsoFolder)
         foreach ($f in $found) { Write-Log "Found ISO $(Split-Path $f.Path -Leaf): build $($f.Build), $($f.Lang), $($f.Editions.Name -join ', ')" }
         if (-not $found) { Write-Log "No ISOs in $($Cfg.IsoFolder)" }
-        $plan = Get-BuildPlan $found $(if ($Cfg.UseUup) { Get-UupBuilds } else { @() }) $Cfg
+        $builds = if ($Cfg.UseUup) { Get-UupBuilds } else { @() }
+        $plan = Get-BuildPlan $found $builds $Cfg
         if ($plan.Newest) { Write-Log "Newest Windows: $($plan.Newest.title)" }
         if ($plan.Note) { Write-Log $plan.Note }
         if ($plan.Skipped) { Write-Log "NOTE: $($plan.Skipped.title) is newer but not picked automatically (not known to be for every PC); pick it under 'Windows version' to use it" }
@@ -203,6 +204,8 @@ function Invoke-Build($Cfg, $Sync) {
             if (-not $base) { $base = Get-IsoInfo $uupIso }
             $sources += $missing | ForEach-Object { @{ Iso = $uupIso; Name = $_ } }
         }
+        # For 'Stay on this Windows version'; without UUP data the patch reads the image's own version.
+        $Cfg.ReleaseVersion = if ($uup) { Get-ReleaseVersion $uup } else { Get-ReleaseVersion (Select-UupBuild $builds $base.Build) }
         $drive = Mount-SourceIso $base.Path
         Write-Log "Copying $($base.Path)"
         $ErrorActionPreference = 'Continue'
