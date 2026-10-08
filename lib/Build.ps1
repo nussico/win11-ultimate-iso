@@ -214,7 +214,9 @@ function Invoke-Build($Cfg, $Sync) {
             Write-Log "UUP download + conversion took $(Format-Duration ((Get-Date) - $t))"
             # Keep it with your ISOs so the next build reuses it instead of downloading again.
             New-Item -ItemType Directory -Force $Cfg.IsoFolder | Out-Null
-            $uupIso = (Move-Item $uupIso $Cfg.IsoFolder -Force -PassThru).FullName
+            # Editions in the name: a Pro-only and a multi-edition download of the same build get the same name from UUP dump.
+            $name = "$([IO.Path]::GetFileNameWithoutExtension($uupIso))_$(($missing | ForEach-Object { $_ -replace '^Windows 11 ' }) -join '-').iso"
+            $uupIso = (Move-Item $uupIso (Join-Path $Cfg.IsoFolder $name) -Force -PassThru).FullName
             Set-Content "$uupIso.build" $uup.build
             Write-Log "Saved $(Split-Path $uupIso -Leaf) to $($Cfg.IsoFolder) for next builds"
             if (-not $base) { $base = Get-IsoInfo $uupIso }

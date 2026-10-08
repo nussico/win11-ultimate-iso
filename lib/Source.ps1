@@ -60,7 +60,16 @@ function Test-UsableIso($Iso, $Cfg) { -not ($Iso.Fast -and $Cfg.UseUup -and -not
 function Get-BuildPlan($Isos, $Builds, $Cfg) {
     $p = @{ Base = $null; Newest = (Select-NewestUupBuild $Builds); Missing = @(); Uup = $null; Note = $null; Error = $null; Skipped = $null }
     if ($Cfg.Newest -and -not $Cfg.UupBuild) { $p.Skipped = Get-SkippedNewerRelease $Builds $p.Newest }
-    $p.Base = $Isos | Where-Object { $_.Lang -eq $Cfg.BaseLang -and (Test-UsableIso $_ $Cfg) } | Sort-Object { [int]$_.Build } -Descending | Select-Object -First 1
+    $isos = @($Isos | Where-Object { $_.Lang -eq $Cfg.BaseLang -and (Test-UsableIso $_ $Cfg) })
+    # With UUP: an ISO with exactly the ticked editions (only Pro -> a Pro-only ISO, downloaded once and kept next to
+    # the multi-edition one). Without UUP (or UUP unreachable) any of your ISOs.
+    if ($Cfg.UseUup -and $Builds) {
+        $want = Get-DownloadEditions $Cfg.Editions
+        $fit = @($isos | Where-Object { -not (Compare-Object @($_.Editions.Name) $want) })
+        if ($isos -and -not $fit) { $p.Note = "None of your ISOs has exactly $($Cfg.Editions -join ', '): downloading one with just these (kept for next builds)" }
+        $isos = $fit
+    }
+    $p.Base = $isos | Sort-Object { [int]$_.Build } -Descending | Select-Object -First 1
     if ($Cfg.Newest -and $p.Base -and $p.Newest -and [int]$p.Base.Build -lt [int]$p.Newest.build.Split('.')[0]) {
         if ($Cfg.UseUup) { $p.Note = "Your ISO is build $($p.Base.Build) (older version): downloading the newest instead"; $p.Base = $null }
         else { $p.Note = "NOTE: a newer Windows version exists ($($p.Newest.title)); turn on UUP dump to use it" }
@@ -119,6 +128,11 @@ function Get-SkippedNewerRelease($Builds, $Newest) {
 
 function Get-UupLanguages($Uuid) {
     @((Invoke-RestMethod "$UupApi/listlangs.php?id=$Uuid" -TimeoutSec 20).response.langList | Where-Object { $_ -ne 'neutral' } | Sort-Object)
+}
+
+# Editions a UUP download of these contains: virtual editions are built from Pro, which stays in the ISO.
+function Get-DownloadEditions([string[]]$Names) {
+    @(@($Names) + @(if ($Names | Where-Object { $UupEditions[$_].Virtual }) { 'Windows 11 Pro' }) | Select-Object -Unique)
 }
 
 # UUP dump package request. Fast = skip integrating the latest cumulative update (Windows Update installs it later).

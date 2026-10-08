@@ -203,8 +203,8 @@ function Update-Editions {
     # Keep ticks across rescans / language changes; none on start.
     $checked = @($script:edChecks.Keys | Where-Object { $script:edChecks[$_].IsChecked })
     $use = @{ UseUup = [bool]$ui.UseUup.IsChecked; Fast = [bool]$ui.Fast.IsChecked }
-    $iso = $script:IsoInfos | Where-Object { $_.Lang -eq $ui.BaseLang.SelectedItem -and (Test-UsableIso $_ $use) } | Select-Object -First 1
-    $names = @($iso.Editions.Name | Where-Object { $_ })
+    $isos = $script:IsoInfos | Where-Object { $_.Lang -eq $ui.BaseLang.SelectedItem -and (Test-UsableIso $_ $use) }
+    $names = @($isos | ForEach-Object { $_.Editions.Name } | Where-Object { $_ } | Select-Object -Unique)
     $all = @($names)
     if ($ui.UseUup.IsChecked) { $all += @($UupEditions.Keys | Where-Object { $_ -notin $names }) }
     $ui.EditionPanel.Children.Clear(); $script:edChecks = [ordered]@{}
@@ -586,10 +586,10 @@ function Get-FolderGB($Path) {
     if (-not (Test-Path $Path)) { return 0 }
     [math]::Round(((Get-ChildItem $Path -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum) / 1GB, 1)
 }
-# UUP downloads (they have a .build sidecar) replaced by a newer ISO of the same language. Your own ISOs are never touched.
+# UUP downloads (they have a .build sidecar) replaced by a newer ISO of the same language and editions. Your own ISOs are never touched.
 function Get-OldDownloads {
     $script:IsoInfos | Where-Object { Test-Path "$($_.Path).build" } | Where-Object {
-        $i = $_; $script:IsoInfos | Where-Object { $_.Lang -eq $i.Lang -and [int]$_.Build -gt [int]$i.Build } }
+        $i = $_; $script:IsoInfos | Where-Object { $_.Lang -eq $i.Lang -and [int]$_.Build -gt [int]$i.Build -and -not (Compare-Object @($_.Editions.Name) @($i.Editions.Name)) } }
 }
 function Update-Storage {
     $old = @(Get-OldDownloads)
