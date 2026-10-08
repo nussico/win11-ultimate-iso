@@ -376,7 +376,7 @@
       <!-- Build -->
       <!-- Fills the window; below MinHeight the page scrolls instead of squeezing the steps and log away -->
       <ScrollViewer x:Name="PageBuild" Style="{StaticResource Page}" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
-      <Border Padding="36,30,36,30" MinHeight="740" Height="{Binding ViewportHeight, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"><Grid>
+      <Border x:Name="BuildBody" Padding="36,30,36,30" Height="{Binding ViewportHeight, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"><Grid>
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <TextBlock Text="Build" Style="{StaticResource H1}" Margin="0,0,0,16"/>
         <Grid Grid.Row="1">
@@ -416,7 +416,8 @@
               <ProgressBar x:Name="Progress" Maximum="9" Height="8" Margin="0,14,0,0"/></StackPanel>
           </DockPanel>
         </Border>
-        <Grid Grid.Row="3">
+        <!-- Builder.ps1 raises BuildBody.MinHeight so this row never gets smaller than the 9 steps need; the page scrolls instead -->
+        <Grid x:Name="BuildBottom" Grid.Row="3">
           <Grid.ColumnDefinitions><ColumnDefinition Width="240"/><ColumnDefinition/></Grid.ColumnDefinitions>
           <!-- Step list, filled by Builder.ps1: 9 equal rows that share the height, no scrolling -->
           <Border Style="{StaticResource Card}" Margin="0,0,14,0" Padding="18,14">

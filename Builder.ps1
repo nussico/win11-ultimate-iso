@@ -521,9 +521,13 @@ function Update-Plan {
         $cached = $cachePath -and (Test-Path $cachePath)
         $script:planKey = if ($cached) { 'Cached' } elseif ($cfg.QuickCompress) { 'Quick' } else { 'Max' }; $script:planEds = $cfg.Editions.Count
         $t = Get-Timing
-        $min = 1 + [math]::Ceiling($t.($script:planKey) * $(if ($cached) { 1 } else { $script:planEds }))
-        $min += $(if ($p.Missing) { if ($cfg.Fast) { 15 } else { 60 } } else { 0 })
-        $script:planMinutes = $min
+        $img = $t.($script:planKey) * $(if ($cached) { 1 } else { $script:planEds })   # steps 3-9
+        $dl = if ($p.Missing) { if ($cfg.Fast) { 15 } else { 60 } } else { 0 }          # step 2
+        $min = 1 + [math]::Ceiling($img) + $dl
+        # Minutes per step for the progress bar and the time left. Shares of steps 3-9 come from real builds:
+        # patching is the longest step, compression only matters at max compression, a cached image mostly writes the ISO.
+        $share = switch ($script:planKey) { Cached { 0.05, 0.05, 0.05, 0.05, 0.05, 0.6, 0.15 } Quick { 0.27, 0.5, 0.06, 0.01, 0.04, 0.1, 0.02 } default { 0.2, 0.37, 0.05, 0.01, 0.27, 0.08, 0.02 } }
+        $script:planSteps = @(0.2, ($dl + 0.8)) + @($share | ForEach-Object { $_ * $img })
         $need = Get-NeededGB $cached; $free = [math]::Round((Get-PSDrive $root.Substring(0, 1)).Free / 1GB)
 
         $how = $(if ($cached) { 'reuses your last build' } elseif ($t.Measured -contains $script:planKey) { 'measured on this PC' } else { 'estimate' })
@@ -656,6 +660,14 @@ for ($i = 1; $i -le 9; $i++) {
     $ui.StepList.Children.Add($row) | Out-Null
     $script:stepRows += @{ N = $i; Line = $line; Halo = $halo; Scale = $scale; Dot = $dot; Mark = $mark; Name = $name; Time = $time }
 }
+# The page fills the window, but the step/log row keeps room for 9 readable steps (26px each plus card header);
+# below that the page gets a scrollbar instead of squeezing the steps.
+function Set-BuildMinHeight {
+    $min = [math]::Ceiling($ui.BuildBody.ActualHeight - $ui.BuildBottom.ActualHeight) + 9 * 26 + 70
+    if ([math]::Abs($ui.BuildBody.MinHeight - $min) -gt 1) { $ui.BuildBody.MinHeight = $min }
+}
+$ui.BuildBody.Add_SizeChanged({ Set-BuildMinHeight })
+$ui.BuildBottom.Add_SizeChanged({ Set-BuildMinHeight })
 function Set-StepState($I, $State, $Time) {
     $r = $script:stepRows[$I - 1]
     $r.Halo.BeginAnimation([Windows.UIElement]::OpacityProperty, $null)
@@ -739,22 +751,23 @@ $timer.Add_Tick({
             Set-StepState $s 'active'
             Set-BuildStatus 'running' $steps[$s - 1].Name "Step $s of 9  -  $($steps[$s - 1].Desc)"
         }
-        # Running clocks and a creeping bar show the build is alive during long silent DISM operations:
-        # within a step the bar eases toward the next step but never reaches it.
+        # Bar and time left both come from the planned minutes per step, so they agree: the bar is the share of the
+        # planned time done, and a step that runs long stalls the bar near its end instead of counting down past zero.
         $elapsed = $now - $script:buildStart
         $ui.Elapsed.Text = Format-Clock $elapsed
         $v = 0
         if ($s -gt 0) {
-            $inStep = ($now - $script:stepStarts[$s]).TotalSeconds
+            $inStep = ($now - $script:stepStarts[$s]).TotalMinutes
             $script:stepRows[$s - 1].Time.Text = Format-Clock ($now - $script:stepStarts[$s])
-            $v = ($s - 1) + 0.9 * (1 - [math]::Exp(-$inStep / 90))
+            $plan = $script:planSteps; $total = ($plan | Measure-Object -Sum).Sum
+            $done = ($plan[0..($s - 1)] | Measure-Object -Sum).Sum - $plan[$s - 1]
+            $here = [math]::Min($inStep, 0.95 * $plan[$s - 1])
+            $v = 9 * ($done + $here) / $total
+            $left = $total - $done - $plan[$s - 1] + [math]::Max($plan[$s - 1] - $inStep, 0.1 * $plan[$s - 1])
+            $ui.Eta.Text = if ($left -ge 1.5) { "elapsed  -  about $([math]::Round($left)) min left" } else { 'elapsed  -  almost done' }
         }
         $ui.Progress.Value = $v
         $win.TaskbarItemInfo.ProgressState = 'Normal'; $win.TaskbarItemInfo.ProgressValue = $v / 9
-        if ($script:planMinutes) {
-            $left = $script:planMinutes - $elapsed.TotalMinutes
-            $ui.Eta.Text = if ($left -ge 1.5) { "about $([math]::Round($left)) min left" } elseif ($left -gt -3) { 'almost done' } else { 'longer than estimated' }
-        }
         if ($script:sync.Done -or $script:job.Handle.IsCompleted) {
             if (-not $script:sync.Done -and -not $script:sync.Error) { $script:sync.Error = 'The build stopped unexpectedly. See the log.' }
             while ($script:sync.Log.TryDequeue([ref]$line)) { Add-LogLine $line }
@@ -817,7 +830,7 @@ $ui.BuildBtn.Add_Click({
         1..9 | ForEach-Object { Set-StepState $_ 'pending' }
         $script:buildOutput = $cfg.Output; $ui.Elapsed.Text = '0:00'; $ui.Eta.Text = ''
         Set-BuildStatus 'running' 'Starting...' 'Preparing the build'
-        $script:imageStart = $null; $script:planKey = $null; Update-Plan   # sets planKey / planEds / planMinutes for the timing
+        $script:imageStart = $null; $script:planKey = $null; $script:planSteps = @(1) * 9; Update-Plan   # sets planKey / planEds / planSteps for the timing
         $script:sync = [hashtable]::Synchronized(@{ Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]'; Step = 0; Cancel = $false; Done = $false; Error = $null })
         $ps = [powershell]::Create()
         $ps.AddScript({
