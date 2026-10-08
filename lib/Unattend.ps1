@@ -60,6 +60,19 @@ foreach ($id in @(__IDS__)) {
 '@.Replace('__IDS__', $list)
 }
 
+# Names Windows Setup rejects halfway through the install ("could not parse or process the answer file"),
+# so the GUI checks them before building. Returns the problem, or nothing.
+function Get-AccountNameError($UserName, $ComputerName) {
+    $n = "$UserName".Trim()
+    if ($n.Length -gt 20) { return 'Username can have at most 20 characters.' }
+    if ($n -match '["/\\\[\]:;|=,+*?<>@%]' -or $n -match '^\.+$|\.$') { return 'Username cannot contain " / \ [ ] : ; | = , + * ? < > @ % or end with a dot.' }
+    if ($n -in 'Administrator', 'Guest', 'DefaultAccount', 'WDAGUtilityAccount', 'System', 'None', 'Users', 'Administrators') { return "'$n' is reserved by Windows; pick another username." }
+    if ($ComputerName) {
+        if ($ComputerName -notmatch '^[A-Za-z0-9-]{1,15}$' -or $ComputerName -match '^\d+$') { return 'Computer name: 1 to 15 letters, digits or dashes, not only digits.' }
+        if ($ComputerName -eq $n) { return 'Computer name and username must differ.' }
+    }
+}
+
 # Unattend "obfuscation" (base64 of UTF-16 password + suffix). Not encryption.
 function ConvertTo-UnattendPassword($Pw, $Suffix) {
     [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("$Pw$Suffix"))

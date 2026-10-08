@@ -27,7 +27,10 @@ function Get-InstallImage($Root) {
 function Mount-Iso($Path) {
     $img = Get-DiskImage -ImagePath $Path
     if (-not $img.Attached) { $img = Mount-DiskImage -ImagePath $Path -PassThru }
-    "$(($img | Get-Volume).DriveLetter):"
+    # The letter can show up a moment after mounting; none at all means automount is off on this PC.
+    for ($i = 0; $i -lt 10 -and -not ($letter = (Get-DiskImage -ImagePath $Path | Get-Volume).DriveLetter); $i++) { Start-Sleep -Milliseconds 500 }
+    if (-not $letter) { throw "$(Split-Path $Path -Leaf) mounted without a drive letter (automount off? run 'mountvol /e' as admin)" }
+    "${letter}:"
 }
 
 function Get-IsoInfo($Path) {
@@ -107,7 +110,8 @@ function Get-UupRequest([string[]]$EditionNames, [bool]$Fast) {
 }
 
 # Builds an ISO with UUP dump's own download+convert package. Returns the ISO path.
-function Save-UupIso($Uuid, $Lang, [string[]]$EditionNames, $Dest, [bool]$Fast) {
+# $Cancelled: returns $true when the user cancelled; the download (cmd + aria2c + converter) is then stopped.
+function Save-UupIso($Uuid, $Lang, [string[]]$EditionNames, $Dest, [bool]$Fast, [scriptblock]$Cancelled = { $false }) {
     $req = Get-UupRequest $EditionNames $Fast
     New-Item -ItemType Directory -Force $Dest | Out-Null
     $zip = "$Dest\uup.zip"
@@ -117,8 +121,13 @@ function Save-UupIso($Uuid, $Lang, [string[]]$EditionNames, $Dest, [bool]$Fast) 
     $ini = "$Dest\ConvertConfig.ini"
     (Get-Content $ini) -replace '^AutoExit\s*=.*', 'AutoExit    =1' -replace '^AddUpdates\s*=.*', "AddUpdates   =$($req.Updates)" `
         -replace '^vAutoEditions=.*', "vAutoEditions=$($req.Virtual -join ',')" | Set-Content $ini
-    # stdin from NUL so any 'pause' returns immediately
-    $p = Start-Process cmd.exe -ArgumentList '/c', 'uup_download_windows.cmd < NUL' -WorkingDirectory $Dest -Wait -PassThru -WindowStyle Minimized
+    # stdin from NUL so any 'pause' returns immediately; .\ because NoDefaultCurrentDirectoryInExePath=1 hides the folder from cmd
+    $p = Start-Process cmd.exe -ArgumentList '/c', '.\uup_download_windows.cmd < NUL' -WorkingDirectory $Dest -PassThru -WindowStyle Minimized
+    $null = $p.Handle   # keeps ExitCode readable after the process ends
+    while (-not $p.WaitForExit(1000)) {
+        # try: under ErrorActionPreference Stop, taskkill's stderr would replace the cancel with a different error
+        if (& $Cancelled) { try { taskkill /T /F /PID $p.Id 2>&1 | Out-Null } catch { }; throw 'Cancelled by user' }
+    }
     $iso = Get-ChildItem $Dest -Filter *.iso | Select-Object -First 1
     if (-not $iso) { throw "UUP dump conversion produced no ISO (exit $($p.ExitCode)); see $Dest" }
     $iso.FullName

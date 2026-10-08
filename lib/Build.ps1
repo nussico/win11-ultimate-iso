@@ -192,7 +192,7 @@ function Invoke-Build($Cfg, $Sync) {
             Write-Log "Downloading via UUP dump: $($missing -join ', ') (this takes a while)"
             if ($Cfg.Fast) { Write-Log 'Fast mode: latest update not integrated (Windows Update installs it after setup)' }
             $t = Get-Date
-            $uupIso = Save-UupIso $uup.uuid $Cfg.BaseLang $missing "$w\uup" $Cfg.Fast
+            $uupIso = Save-UupIso $uup.uuid $Cfg.BaseLang $missing "$w\uup" $Cfg.Fast { $Sync.Cancel }
             Write-Log "UUP download + conversion took $(Format-Duration ((Get-Date) - $t))"
             # Keep it with your ISOs so the next build reuses it instead of downloading again.
             New-Item -ItemType Directory -Force $Cfg.IsoFolder | Out-Null
@@ -221,6 +221,7 @@ function Invoke-Build($Cfg, $Sync) {
             if ($cached) { break }
             $wim = Get-InstallImage (Mount-SourceIso $s.Iso)
             $idx = (Get-WindowsImage -ImagePath $wim | Where-Object ImageName -eq $s.Name).ImageIndex
+            if (-not $idx) { throw "'$($s.Name)' is not in $(Split-Path $s.Iso -Leaf). Rescan your ISOs and pick the editions again." }
             Write-Log "Export $($s.Name) (index $idx) - takes 1-3 minutes"
             Export-WindowsImage -SourceImagePath $wim -SourceIndex $idx -DestinationImagePath "$w\install.wim" -CompressionType fast | Out-Null
         }

@@ -76,6 +76,9 @@ $s = ([xml](New-UnattendXml $u)).OuterXml
 Assert ($s -match 'cscript //nologo %d:\\sources\\autoinstall.js "Windows 11 Pro"' -and $s -notmatch 'WillWipeDisk') 'BestSsd runs script with edition, no fixed-disk wipe'
 $s = ([xml](New-LocalAccountXml)).OuterXml
 Assert ($s -match 'HideOnlineAccountScreens>true' -and $s -notmatch 'windowsPE|LocalAccounts') 'Local-account-only XML: hides MS account, setup stays interactive'
+Assert (-not (Get-AccountNameError 'Max Muster' 'GAMING-PC') -and -not (Get-AccountNameError 'User' '')) 'Normal user and computer names pass'
+Assert ((Get-AccountNameError 'a/b' '') -and (Get-AccountNameError 'Administrator' '') -and (Get-AccountNameError ('x' * 21) '')) 'Bad, reserved and too long usernames are caught'
+Assert ((Get-AccountNameError 'User' 'MY_PC') -and (Get-AccountNameError 'User' '12345') -and (Get-AccountNameError 'User' 'A-VERY-LONG-PC-NAME') -and (Get-AccountNameError 'Pc1' 'PC1')) 'Bad computer names are caught (chars, only digits, > 15, same as user)'
 
 # Disk picking (autoinstall.js, run with cscript like Setup does), fed with real Win32_DiskDrive values.
 $cases = [ordered]@{

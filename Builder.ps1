@@ -127,14 +127,37 @@ Start-Background {
 
 # --- Updates: install.ps1 writes the installed commit to version.txt ---
 $repo = 'nussico/win11-ultimate-iso'
+function Start-Update {
+    if ($script:job) { Show-Msg 'A build is running. Update when it is done.' | Out-Null; return }
+    # Closing mid-scan is refused (an ISO would stay mounted) while the installer already runs: update when the scan ends.
+    if ($script:scanning) { $script:updateAfterScan = $true; $ui.ScanResult.Text = 'Scanning your ISOs... the builder updates when done.'; return }
+    $env:W11UB_DIR = $root   # installer updates this folder instead of asking for a drive
+    Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"Start-Sleep 2; irm https://raw.githubusercontent.com/$repo/main/install.ps1 | iex`""
+    $win.Close()
+}
+# Popup once per new version (update-skip.txt remembers a "No"); the Update button stays either way.
+function Show-UpdatePopup($Latest, $News) {
+    $skip = try { (Get-Content "$root\update-skip.txt" -ErrorAction Stop).Trim() } catch { '' }
+    if ($skip -eq $Latest -or $script:job) { return }
+    $list = if ($News) { "What's new:`n" + (($News | Select-Object -First 8 | ForEach-Object { "  - $_" }) -join "`n") + $(if (@($News).Count -gt 8) { "`n  ... and $(@($News).Count - 8) more" }) + "`n`n" } else { '' }
+    if ((Show-Msg "A new version of the builder is available.`n`n$($list)Update now? The builder restarts; your ISOs, presets and output are kept." 'Information' 'YesNo') -eq 'Yes') { Start-Update }
+    else { try { Set-Content "$root\update-skip.txt" $Latest } catch { } }
+}
 Start-Background {
     param($root, $repo)
     $have = (Get-Content "$root\version.txt" -ErrorAction Stop).Trim()
-    $latest = Invoke-RestMethod "https://api.github.com/repos/$repo/commits/main" -Headers @{ Accept = 'application/vnd.github.sha' } -TimeoutSec 5
-    [bool]($latest -and $latest.Trim() -ne $have)
+    $latest = (Invoke-RestMethod "https://api.github.com/repos/$repo/commits/main" -Headers @{ Accept = 'application/vnd.github.sha' } -TimeoutSec 5).Trim()
+    if (-not $latest -or $latest -eq $have) { return }
+    # Commit titles since the installed version, newest first (unknown base e.g. after a force push: no list)
+    $news = try { $c = Invoke-RestMethod "https://api.github.com/repos/$repo/compare/$have...$latest" -TimeoutSec 5; [array]::Reverse($c.commits); @($c.commits | ForEach-Object { ($_.commit.message -split "`n")[0] }) } catch { @() }
+    [pscustomobject]@{ Latest = $latest; News = $news }   # not a hashtable: $out[0] on one would look up key 0
 } $repo {
-    param($out)   # empty for a manual install, offline or rate-limited: no button
-    if ($out -and $out[0]) { $ui.UpdateBtn.Visibility = 'Visible'; $ui.SubTitle.Visibility = 'Collapsed' }
+    param($out)   # empty for a manual install, offline, rate-limited or up to date: no button, no popup
+    if (-not ($out -and $out[0])) { return }
+    $ui.UpdateBtn.Visibility = 'Visible'; $ui.SubTitle.Visibility = 'Collapsed'
+    $script:update = $out[0]
+    if ($win.IsLoaded) { Show-UpdatePopup $script:update.Latest $script:update.News }
+    else { $win.Add_ContentRendered({ Show-UpdatePopup $script:update.Latest $script:update.News }) }
 }
 # --- Info page ---
 # Short commit from install.ps1, stamped on every ISO (label, Win11Ultimate.txt, log); 'dev' for a git checkout.
@@ -144,11 +167,7 @@ $ui.InfoFolder.Text = $root
 $ui.OpenGitHub.Add_Click({ Start-Process "https://github.com/$repo" })
 $ui.OpenFolder.Add_Click({ Start-Process explorer.exe $root })
 $ui.UpdateBtn.Add_Click({
-        if ($script:job) { Show-Msg 'A build is running. Update when it is done.' | Out-Null; return }
-        if ((Show-Msg 'Download the newest builder and restart it? Your ISOs and output are kept.' 'Question' 'YesNo') -ne 'Yes') { return }
-        $env:W11UB_DIR = $root   # installer updates this folder instead of asking for a drive
-        Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"Start-Sleep 2; irm https://raw.githubusercontent.com/$repo/main/install.ps1 | iex`""
-        $win.Close()
+        if ((Show-Msg 'Download the newest builder and restart it? Your ISOs and output are kept.' 'Question' 'YesNo') -eq 'Yes') { Start-Update }
     })
 
 # --- Source / languages ---
@@ -399,6 +418,7 @@ function Invoke-Scan {
     Start-Background { param($root, $folder) Get-SourceIsos $folder } $ui.IsoFolder.Text {
         param($out)
         $script:scanning = $false; $ui.ScanIsos.IsEnabled = $true
+        if ($script:updateAfterScan) { Start-Update; return }
         $script:IsoInfos = @($out | ForEach-Object { $_ })
         $ui.ScanResult.Text = if ($script:IsoInfos) {
             ($script:IsoInfos | ForEach-Object { "$($_.Lang)  -  build $($_.Build)  -  $($_.Editions.Count) editions  -  $(Split-Path $_.Path -Leaf)" }) -join "`n"
@@ -423,8 +443,8 @@ function Get-Config {
         Editions = @($script:edChecks.Keys | Where-Object { $script:edChecks[$_].IsChecked })
         Patches = @($Patches.Keys | Where-Object { $patchChecks[$_].IsChecked }); DriversPath = $ui.DriversPath.Text
         Unattend = @{
-            Enabled = [bool]$ui.UnattendOn.IsChecked; UserName = $ui.UserName.Text; Password = $ui.Password.Password
-            AutoLogon = [bool]$ui.AutoLogon.IsChecked; Admin = [bool]$ui.AdminGroup.IsChecked; ComputerName = $ui.ComputerName.Text
+            Enabled = [bool]$ui.UnattendOn.IsChecked; UserName = $ui.UserName.Text.Trim(); Password = $ui.Password.Password
+            AutoLogon = [bool]$ui.AutoLogon.IsChecked; Admin = [bool]$ui.AdminGroup.IsChecked; ComputerName = $ui.ComputerName.Text.Trim()
             Language = [string]$ui.BaseLang.SelectedItem; TimeZone = [string]$ui.TimeZone.SelectedItem; Keyboard = [string]$ui.Keyboard.SelectedItem; Locale = [string]$ui.Locale.SelectedItem
             SkipOobe = [bool]$ui.SkipOobe.IsChecked; Edition = $(if ($ui.SkipEdition.IsChecked) { [string]$ui.Edition.SelectedItem } else { '' })
             ProductKey = $ui.ProductKey.Text.Trim().ToUpper(); AutoInstall = [string]$ui.AutoInstall.SelectedItem.Tag
@@ -444,6 +464,7 @@ function Test-Config($c) {
     $u = $c.Unattend
     if ($u.Enabled) {
         if (-not $u.UserName.Trim()) { return 'Username is empty.', 'UserName' }
+        if ($bad = Get-AccountNameError $u.UserName $u.ComputerName) { return $bad, $(if ($bad -like 'Computer*') { 'ComputerName' } else { 'UserName' }) }
         if ($u.CustomScript -and -not (Test-Path $u.CustomScript)) { return 'Custom script not found.', 'CustomScript' }
         if ($u.WifiName -and $u.WifiPassword -and $u.WifiPassword.Length -notin 8..63) { return 'Wi-Fi password must be 8 to 63 characters (or empty for an open network).', 'WifiPassword' }
         if ($u.ProductKey -and $u.ProductKey -notmatch '^([A-Z0-9]{5}-){4}[A-Z0-9]{5}$') { return 'Product key must look like XXXXX-XXXXX-XXXXX-XXXXX-XXXXX.', 'ProductKey' }
@@ -759,7 +780,7 @@ $timer.Add_Tick({
         if ($s -gt 0) {
             $inStep = ($now - $script:stepStarts[$s]).TotalMinutes
             $script:stepRows[$s - 1].Time.Text = Format-Clock ($now - $script:stepStarts[$s])
-            $plan = $script:planSteps; $total = ($plan | Measure-Object -Sum).Sum
+            $plan = $script:run.Steps; $total = ($plan | Measure-Object -Sum).Sum
             $done = ($plan[0..($s - 1)] | Measure-Object -Sum).Sum - $plan[$s - 1]
             $here = [math]::Min($inStep, 0.95 * $plan[$s - 1])
             $v = 9 * ($done + $here) / $total
@@ -788,7 +809,7 @@ $timer.Add_Tick({
                 Set-BuildStatus 'failed' 'Build failed' "$($script:sync.Error)  -  details in build-log.txt next to the ISO."
                 Show-Msg "Build failed:`n$($script:sync.Error)`n`nDetails: build-log.txt next to the ISO." 'Error' | Out-Null
             } else {
-                if ($script:imageStart -and $script:planKey) { Save-Timing $script:planKey (((Get-Date) - $script:imageStart).TotalMinutes / $(if ($script:planKey -eq 'Cached') { 1 } else { $script:planEds })) }
+                if ($script:imageStart -and $script:run.Key) { Save-Timing $script:run.Key (((Get-Date) - $script:imageStart).TotalMinutes / $(if ($script:run.Key -eq 'Cached') { 1 } else { $script:run.Eds })) }
                 Set-StepState 9 'done' ($now - $script:stepStarts[9]); $ui.Progress.Value = 9
                 $size = try { " ($([math]::Round((Get-Item $script:buildOutput).Length / 1GB, 1)) GB)" } catch { '' }
                 Set-BuildStatus 'done' 'ISO ready' "$script:buildOutput$size"
@@ -830,7 +851,9 @@ $ui.BuildBtn.Add_Click({
         1..9 | ForEach-Object { Set-StepState $_ 'pending' }
         $script:buildOutput = $cfg.Output; $ui.Elapsed.Text = '0:00'; $ui.Eta.Text = ''
         Set-BuildStatus 'running' 'Starting...' 'Preparing the build'
-        $script:imageStart = $null; $script:planKey = $null; $script:planSteps = @(1) * 9; Update-Plan   # sets planKey / planEds / planSteps for the timing
+        # Snapshot the plan: switching to this page re-plans, and once step 7 writes the cache the plan would say "Cached".
+        $script:imageStart = $null; $script:planKey = $null; $script:planSteps = @(1) * 9; Update-Plan
+        $script:run = @{ Key = $script:planKey; Eds = $script:planEds; Steps = $script:planSteps }
         $script:sync = [hashtable]::Synchronized(@{ Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]'; Step = 0; Cancel = $false; Done = $false; Error = $null })
         $ps = [powershell]::Create()
         $ps.AddScript({
