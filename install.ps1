@@ -5,6 +5,19 @@
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     $repo = 'nussico/win11-ultimate-iso'
 
+    # Not admin: rerun this installer in an elevated Windows PowerShell (UAC prompt). The elevated process doesn't
+    # inherit our environment, so W11UB_DIR from the Update button is passed along in the command.
+    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole('Administrators')
+    if (-not $isAdmin) {
+        Write-Host 'Win11 Ultimate ISO Builder needs admin rights - confirm the UAC prompt.' -ForegroundColor Cyan
+        $cmd = "try { $(if ($env:W11UB_DIR) { "`$env:W11UB_DIR = '$($env:W11UB_DIR -replace "'", "''")'; " })irm https://raw.githubusercontent.com/$repo/main/install.ps1 | iex } " +
+            "catch { Write-Host `$_ -ForegroundColor Red; Read-Host 'Install failed. Press Enter to close' }"
+        $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
+        try { Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $enc" }
+        catch { Write-Host 'Admin rights were declined; nothing was installed.' -ForegroundColor Yellow }
+        return
+    }
+
     # Builds need ~60 GB next to the builder. The Update button passes its folder; otherwise ask which drive
     # (Enter = the drive that already has the builder, else the one with the most free space).
     $dir = $env:W11UB_DIR
