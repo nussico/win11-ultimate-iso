@@ -256,32 +256,32 @@
       <!-- Source -->
       <ScrollViewer x:Name="PageSource" Style="{StaticResource Page}" VerticalScrollBarVisibility="Auto"><StackPanel Margin="36,30,36,30">
         <TextBlock Text="Source" Style="{StaticResource H1}"/>
-        <TextBlock Text="Where the Windows files come from. Your own official ISOs are used first; anything missing can be downloaded from UUP dump." Style="{StaticResource Sub}"/>
+        <TextBlock Text="Pick what goes on the ISO, then where the files come from. Your own ISOs are used first; anything missing is downloaded." Style="{StaticResource Sub}"/>
+        <!-- 1. What to build -->
         <Border Style="{StaticResource Card}"><StackPanel>
-          <TextBlock Text="LANGUAGE" Style="{StaticResource Section}"/>
-          <ComboBox x:Name="BaseLang" Width="220" HorizontalAlignment="Left"/>
-          <TextBlock Style="{StaticResource Hint}" Text="The ISO is built in this one language: setup and Windows. Keyboard and formats can be set on the Unattended page."/>
+          <TextBlock Text="WINDOWS" Style="{StaticResource Section}"/>
+          <StackPanel Style="{StaticResource Row}" Margin="0,0,0,14"><TextBlock Text="Language" Style="{StaticResource Label}"/><ComboBox x:Name="BaseLang" Width="220"/>
+            <TextBlock Style="{StaticResource Hint}" Margin="14,0,0,0" VerticalAlignment="Center" Text="setup and Windows; keyboard and formats are on the Unattended page"/></StackPanel>
+          <DockPanel><TextBlock Text="Editions" Style="{StaticResource Label}" VerticalAlignment="Top" Margin="0,5,0,0"/>
+            <WrapPanel x:Name="EditionPanel"/></DockPanel>
+          <TextBlock Style="{StaticResource Hint}" Margin="120,0,0,0" Text="Tick one or more. Editions marked 'download' are not in your ISOs and come from UUP dump."/>
         </StackPanel></Border>
+        <!-- 2. Where the files come from -->
         <Border Style="{StaticResource Card}"><StackPanel>
-          <TextBlock Text="YOUR ISOS" Style="{StaticResource Section}"/>
-          <DockPanel>
+          <TextBlock Text="WHERE THE FILES COME FROM" Style="{StaticResource Section}"/>
+          <DockPanel><TextBlock Text="Your ISOs" Style="{StaticResource Label}"/>
             <Button x:Name="ScanIsos" DockPanel.Dock="Right" Content="Scan"/>
             <Button x:Name="BrowseIso" DockPanel.Dock="Right" Content="Browse"/>
             <TextBox x:Name="IsoFolder"/></DockPanel>
-          <TextBlock x:Name="ScanResult" Style="{StaticResource Hint}" Text="Drop official Windows 11 ISOs into this folder and click Scan."/>
-        </StackPanel></Border>
-        <Border Style="{StaticResource Card}"><StackPanel>
-          <TextBlock Text="UUP DUMP" Style="{StaticResource Section}"/>
-          <CheckBox x:Name="UseUup" Style="{StaticResource Toggle}" Content="Download missing editions via UUP dump" IsChecked="True"/>
-          <CheckBox x:Name="Newest" Style="{StaticResource Toggle}" Content="Always use the newest Windows (download it if your ISO is an older version)" IsChecked="True"/>
-          <CheckBox x:Name="Fast" Style="{StaticResource Toggle}" Content="Fast mode: ~15 min instead of ~60 (older base build; Windows Update updates it after setup)" IsChecked="True"/>
-          <StackPanel Style="{StaticResource Row}" Margin="0,8,0,10"><TextBlock Text="Build" Style="{StaticResource Label}"/><ComboBox x:Name="Build" Width="380"/></StackPanel>
-          <TextBlock x:Name="BuildHint" Style="{StaticResource Hint}" Text="Auto picks the newest build matching your ISO."/>
-        </StackPanel></Border>
-        <Border Style="{StaticResource Card}"><StackPanel>
-          <TextBlock Text="EDITIONS" Style="{StaticResource Section}"/>
-          <WrapPanel x:Name="EditionPanel"/>
-          <TextBlock Style="{StaticResource Hint}" Text="Editions found in your ISO for this language. Ones marked UUP are built via UUP dump."/>
+          <TextBlock x:Name="ScanResult" Style="{StaticResource Hint}" Margin="120,6,0,0" Text="Drop official Windows 11 ISOs into this folder and click Scan."/>
+          <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Margin="0,16,0,16"/>
+          <CheckBox x:Name="UseUup" Style="{StaticResource Toggle}" Content="Download missing editions from UUP dump (Microsoft's own update servers)" IsChecked="True"/>
+          <StackPanel x:Name="UupOptions" Margin="50,0,0,0">
+            <CheckBox x:Name="Newest" Style="{StaticResource Toggle}" Content="Always use the newest Windows (download it if your ISO is an older version)" IsChecked="True"/>
+            <CheckBox x:Name="Fast" Style="{StaticResource Toggle}" Content="Fast mode: about 15 instead of 60 minutes (Windows Update installs the latest update after setup)" IsChecked="True"/>
+            <StackPanel Style="{StaticResource Row}" Margin="0,4,0,0"><TextBlock Text="Windows version" Style="{StaticResource Label}"/><ComboBox x:Name="Build" Width="380"/></StackPanel>
+            <TextBlock x:Name="BuildHint" Style="{StaticResource Hint}" Margin="120,6,0,0" Text="Auto picks the newest build matching your ISO."/>
+          </StackPanel>
         </StackPanel></Border>
       </StackPanel></ScrollViewer>
 
@@ -301,70 +301,82 @@
       <!-- Unattended -->
       <ScrollViewer x:Name="PageUnattended" Style="{StaticResource Page}" Visibility="Collapsed" VerticalScrollBarVisibility="Auto"><StackPanel Margin="36,30,36,30">
         <TextBlock Text="Unattended" Style="{StaticResource H1}"/>
-        <TextBlock Text="Generates autounattend.xml so setup answers its own questions." Style="{StaticResource Sub}"/>
-        <CheckBox x:Name="UnattendOn" Style="{StaticResource Toggle}" Content="Enable autounattend.xml" Margin="0,0,0,16"/>
+        <TextBlock Text="Optional: let setup answer its own questions, so installing Windows needs (almost) no clicks." Style="{StaticResource Sub}"/>
+        <Border x:Name="UnattendCard" Style="{StaticResource Card}" Padding="20,18"><StackPanel>
+          <CheckBox x:Name="UnattendOn" Style="{StaticResource Toggle}" Margin="0">
+            <TextBlock Text="Answer setup's questions automatically" FontSize="15" FontWeight="SemiBold"/></CheckBox>
+          <TextBlock x:Name="UnattendHint" Style="{StaticResource Hint}" Margin="50,4,0,0"
+                     Text="Off: normal Windows setup. On: account, region, Wi-Fi, apps and optionally a fully automatic install (written to autounattend.xml)."/>
+        </StackPanel></Border>
         <StackPanel x:Name="UnattendBody">
-          <Border Style="{StaticResource Card}" BorderBrush="#5A2A2A"><StackPanel>
+          <!-- Red border and warning only while a disk-wiping option is picked (Builder.ps1) -->
+          <Border x:Name="InstallCard" Style="{StaticResource Card}"><StackPanel>
             <TextBlock Text="INSTALL" Style="{StaticResource Section}"/>
             <StackPanel Style="{StaticResource Row}"><CheckBox x:Name="SkipEdition" Style="{StaticResource Toggle}" Content="Skip edition choice" Width="200" Margin="0"/><ComboBox x:Name="Edition" Width="260"/></StackPanel>
-            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Product key" Style="{StaticResource Label}"/><TextBox x:Name="ProductKey" Width="300"/></StackPanel>
-            <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,16" Text="Your own key. Empty = enter later, or the PC's digital license activates it automatically."/>
-            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Disk" Style="{StaticResource Label}" Foreground="{StaticResource Danger}"/>
+            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Product key" Style="{StaticResource Label}" Width="200"/><TextBox x:Name="ProductKey" Width="260"/>
+              <TextBlock Text="empty = enter later or use the PC's digital license" Style="{StaticResource Hint}" Margin="12,0,0,0" VerticalAlignment="Center"/></StackPanel>
+            <StackPanel Style="{StaticResource Row}" Margin="0"><TextBlock Text="Disk" Style="{StaticResource Label}" Width="200"/>
               <ComboBox x:Name="AutoInstall" Width="420">
                 <ComboBoxItem Content="Off - choose the disk in setup (safe)" Tag="Off" IsSelected="True"/>
                 <ComboBoxItem Content="Best SSD - wipe only if there is one clear choice" Tag="BestSsd"/>
                 <ComboBoxItem Content="Disk 0 - always wipe disk 0" Tag="Disk0"/>
               </ComboBox></StackPanel>
-            <TextBlock Style="{StaticResource Hint}" Foreground="{StaticResource Danger}" Text="Best SSD prefers NVMe, then SSD, then HDD, never USB or disks under 64 GB, and shows a popup with 10 seconds to cancel. If two disks tie, normal setup opens and a popup says why. Needs 'Skip edition choice'. Any PC booted from this ISO can be wiped."/>
+            <TextBlock x:Name="DiskHint" Style="{StaticResource Hint}" Margin="200,6,0,0" Text="Best SSD prefers NVMe, then SSD, then HDD, never USB or disks under 64 GB, and shows a popup with 10 seconds to cancel. If two disks tie, normal setup opens and a popup says why. Needs 'Skip edition choice'. Any PC booted from this ISO can be wiped."/>
           </StackPanel></Border>
-          <Border Style="{StaticResource Card}"><StackPanel>
-            <TextBlock Text="ACCOUNT" Style="{StaticResource Section}"/>
-            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Username" Style="{StaticResource Label}"/><TextBox x:Name="UserName" Width="220" Text="User"/></StackPanel>
-            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Password" Style="{StaticResource Label}"/><PasswordBox x:Name="Password" Width="220"/>
-              <TextBlock Text="empty = no password" Style="{StaticResource Hint}" Margin="12,0,0,0" VerticalAlignment="Center"/></StackPanel>
-            <CheckBox x:Name="AutoLogon" Style="{StaticResource Toggle}" Content="Auto-login on first boot"/>
-            <CheckBox x:Name="AdminGroup" Style="{StaticResource Toggle}" Content="Make user administrator" IsChecked="True"/>
-            <TextBlock Style="{StaticResource Hint}" Text="The password is stored base64-encoded inside the ISO. That is not encryption."/>
-          </StackPanel></Border>
-          <Border Style="{StaticResource Card}"><StackPanel>
-            <TextBlock Text="SETUP SCREENS" Style="{StaticResource Section}"/>
-            <CheckBox x:Name="SkipOobe" Style="{StaticResource Toggle}" Content="Skip all OOBE screens (EULA, privacy, Microsoft account, network)" IsChecked="True" Margin="0"/>
-          </StackPanel></Border>
-          <Border Style="{StaticResource Card}"><StackPanel>
-            <TextBlock Text="REGION" Style="{StaticResource Section}"/>
-            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Computer name" Style="{StaticResource Label}"/><TextBox x:Name="ComputerName" Width="220"/>
-              <TextBlock Text="empty = random" Style="{StaticResource Hint}" Margin="12,0,0,0" VerticalAlignment="Center"/></StackPanel>
-            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Timezone" Style="{StaticResource Label}"/><ComboBox x:Name="TimeZone" Width="340"/></StackPanel>
-            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Keyboard" Style="{StaticResource Label}"/><ComboBox x:Name="Keyboard" Width="160"/></StackPanel>
-            <StackPanel Style="{StaticResource Row}" Margin="0"><TextBlock Text="Locale / format" Style="{StaticResource Label}"/><ComboBox x:Name="Locale" Width="160"/></StackPanel>
-          </StackPanel></Border>
-          <Border Style="{StaticResource Card}"><StackPanel>
-            <TextBlock Text="WI-FI" Style="{StaticResource Section}"/>
-            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Network name" Style="{StaticResource Label}"/><TextBox x:Name="WifiName" Width="220"/>
-              <TextBlock Text="empty = no Wi-Fi" Style="{StaticResource Hint}" Margin="12,0,0,0" VerticalAlignment="Center"/></StackPanel>
-            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Wi-Fi password" Style="{StaticResource Label}"/><PasswordBox x:Name="WifiPassword" Width="220"/>
-              <TextBlock Text="empty = open network" Style="{StaticResource Hint}" Margin="12,0,0,0" VerticalAlignment="Center"/></StackPanel>
-            <TextBlock Style="{StaticResource Hint}" Foreground="{StaticResource Danger}" Text="Connects after the first login, so the apps can install without a cable. The Wi-Fi password is stored in PLAIN TEXT on the ISO / USB stick: anyone who has the stick can read it. It is not saved in config.json or preset files."/>
-          </StackPanel></Border>
+          <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="14"/><ColumnDefinition/></Grid.ColumnDefinitions>
+            <StackPanel>
+              <Border Style="{StaticResource Card}"><StackPanel>
+                <TextBlock Text="ACCOUNT" Style="{StaticResource Section}"/>
+                <StackPanel Style="{StaticResource Row}"><TextBlock Text="Username" Style="{StaticResource Label}"/><TextBox x:Name="UserName" Width="220" Text="User"/></StackPanel>
+                <StackPanel Style="{StaticResource Row}"><TextBlock Text="Password" Style="{StaticResource Label}"/><PasswordBox x:Name="Password" Width="220"/>
+                  <TextBlock Text="empty = none" Style="{StaticResource Hint}" Margin="12,0,0,0" VerticalAlignment="Center"/></StackPanel>
+                <CheckBox x:Name="AutoLogon" Style="{StaticResource Toggle}" Content="Auto-login on first boot"/>
+                <CheckBox x:Name="AdminGroup" Style="{StaticResource Toggle}" Content="Make user administrator" IsChecked="True"/>
+                <CheckBox x:Name="SkipOobe" Style="{StaticResource Toggle}" Content="Skip all setup screens (EULA, privacy, Microsoft account, network)" IsChecked="True" Margin="0"/>
+                <TextBlock Style="{StaticResource Hint}" Margin="0,10,0,0" Text="The password is stored base64-encoded inside the ISO. That is not encryption."/>
+              </StackPanel></Border>
+              <Border Style="{StaticResource Card}"><StackPanel>
+                <TextBlock Text="WI-FI" Style="{StaticResource Section}"/>
+                <StackPanel Style="{StaticResource Row}"><TextBlock Text="Network name" Style="{StaticResource Label}"/><TextBox x:Name="WifiName" Width="220"/>
+                  <TextBlock Text="empty = no Wi-Fi" Style="{StaticResource Hint}" Margin="12,0,0,0" VerticalAlignment="Center"/></StackPanel>
+                <StackPanel Style="{StaticResource Row}"><TextBlock Text="Password" Style="{StaticResource Label}"/><PasswordBox x:Name="WifiPassword" Width="220"/>
+                  <TextBlock Text="empty = open" Style="{StaticResource Hint}" Margin="12,0,0,0" VerticalAlignment="Center"/></StackPanel>
+                <TextBlock Style="{StaticResource Hint}" Foreground="{StaticResource Warn}" Text="Connects after the first login so apps can install without a cable. The Wi-Fi password is stored in PLAIN TEXT on the ISO / USB stick. It is never saved in config.json or presets."/>
+              </StackPanel></Border>
+            </StackPanel>
+            <StackPanel Grid.Column="2">
+              <Border Style="{StaticResource Card}"><StackPanel>
+                <TextBlock Text="REGION" Style="{StaticResource Section}"/>
+                <StackPanel Style="{StaticResource Row}"><TextBlock Text="Computer name" Style="{StaticResource Label}"/><TextBox x:Name="ComputerName" Width="220"/>
+                  <TextBlock Text="empty = random" Style="{StaticResource Hint}" Margin="12,0,0,0" VerticalAlignment="Center"/></StackPanel>
+                <StackPanel Style="{StaticResource Row}"><TextBlock Text="Timezone" Style="{StaticResource Label}"/><ComboBox x:Name="TimeZone" Width="300"/></StackPanel>
+                <StackPanel Style="{StaticResource Row}"><TextBlock Text="Keyboard" Style="{StaticResource Label}"/><ComboBox x:Name="Keyboard" Width="160"/></StackPanel>
+                <StackPanel Style="{StaticResource Row}" Margin="0"><TextBlock Text="Locale / format" Style="{StaticResource Label}"/><ComboBox x:Name="Locale" Width="160"/></StackPanel>
+              </StackPanel></Border>
+              <Border Style="{StaticResource Card}"><StackPanel>
+                <TextBlock Text="AFTER INSTALL" Style="{StaticResource Section}"/>
+                <CheckBox x:Name="RunWinUtil" Style="{StaticResource Toggle}" Content="Run CTT WinUtil after first login"/>
+                <CheckBox x:Name="EnableAdmin" Style="{StaticResource Toggle}" Content="Activate the hidden Administrator account"/>
+                <DockPanel><TextBlock Text="My script" Style="{StaticResource Label}"/><Button x:Name="BrowseScript" DockPanel.Dock="Right" Content="Browse"/><TextBox x:Name="CustomScript"/></DockPanel>
+                <TextBlock Style="{StaticResource Hint}" Margin="120,6,0,0" Text="Your own script, run once after the first login."/>
+              </StackPanel></Border>
+            </StackPanel>
+          </Grid>
           <Border Style="{StaticResource Card}"><StackPanel>
             <TextBlock Text="APPS" Style="{StaticResource Section}"/>
             <DockPanel><TextBlock Text="Search winget" Style="{StaticResource Label}"/><Button x:Name="SearchApps" DockPanel.Dock="Right" Content="Search"/><TextBox x:Name="AppSearch"/></DockPanel>
-            <WrapPanel x:Name="AppResults" Margin="0,8,0,0"/>
-            <TextBlock Text="Will be installed" Style="{StaticResource Section}" Margin="0,12,0,6"/>
-            <WrapPanel x:Name="AppPanel"/>
-            <TextBlock x:Name="AppsHint" Style="{StaticResource Hint}" Text="Type a name (e.g. discord) and press Enter, then click a result to add it. Click an added app to remove it. Installed with winget after the first login (needs internet)."/>
-          </StackPanel></Border>
-          <Border Style="{StaticResource Card}"><StackPanel>
-            <TextBlock Text="AFTER INSTALL" Style="{StaticResource Section}"/>
-            <CheckBox x:Name="RunWinUtil" Style="{StaticResource Toggle}" Content="Run CTT WinUtil after first login"/>
-            <CheckBox x:Name="EnableAdmin" Style="{StaticResource Toggle}" Content="Activate the hidden Administrator account"/>
-            <DockPanel><TextBlock Text="My script" Style="{StaticResource Label}"/><Button x:Name="BrowseScript" DockPanel.Dock="Right" Content="Browse"/><TextBox x:Name="CustomScript"/></DockPanel>
+            <WrapPanel x:Name="AppResults" Margin="120,8,0,0"/>
+            <DockPanel Margin="0,10,0,0"><TextBlock Text="Will be installed" Style="{StaticResource Label}" VerticalAlignment="Top" Margin="0,5,0,0"/>
+              <WrapPanel x:Name="AppPanel"/></DockPanel>
+            <TextBlock x:Name="AppsHint" Style="{StaticResource Hint}" Margin="120,6,0,0" Text="Type a name (e.g. discord) and press Enter, then click a result to add it. Click an added app to remove it. Installed with winget after the first login (needs internet)."/>
           </StackPanel></Border>
         </StackPanel>
       </StackPanel></ScrollViewer>
 
       <!-- Build -->
-      <Grid x:Name="PageBuild" Style="{StaticResource Page}" Visibility="Collapsed" Margin="36,30,36,30">
+      <!-- Fills the window; below MinHeight the page scrolls instead of squeezing the steps and log away -->
+      <ScrollViewer x:Name="PageBuild" Style="{StaticResource Page}" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+      <Border Padding="36,30,36,30" MinHeight="740" Height="{Binding ViewportHeight, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"><Grid>
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <TextBlock Text="Build" Style="{StaticResource H1}" Margin="0,0,0,16"/>
         <Grid Grid.Row="1">
@@ -406,10 +418,10 @@
         </Border>
         <Grid Grid.Row="3">
           <Grid.ColumnDefinitions><ColumnDefinition Width="240"/><ColumnDefinition/></Grid.ColumnDefinitions>
-          <!-- Step list, filled by Builder.ps1 -->
+          <!-- Step list, filled by Builder.ps1: 9 equal rows that share the height, no scrolling -->
           <Border Style="{StaticResource Card}" Margin="0,0,14,0" Padding="18,14">
             <DockPanel><TextBlock Text="STEPS" Style="{StaticResource Section}" DockPanel.Dock="Top"/>
-              <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel x:Name="StepList"/></ScrollViewer></DockPanel>
+              <UniformGrid x:Name="StepList" Columns="1" Rows="9"/></DockPanel>
           </Border>
           <Border Grid.Column="1" Background="#0A0C10" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="10" Padding="4">
             <RichTextBox x:Name="Log" Padding="10,8" IsReadOnly="True" Background="Transparent" BorderThickness="0" FontFamily="Cascadia Mono, Consolas" FontSize="12"
@@ -425,7 +437,7 @@
             <Button x:Name="RemoveVm" DockPanel.Dock="Right" Content="Remove VM" Margin="0,0,10,0" ToolTip="Delete the test VM and its virtual disk"/>
             <Button x:Name="TestVm" DockPanel.Dock="Right" Content="Test in VM" Margin="0,0,10,0" ToolTip="Boot the built ISO in a Hyper-V virtual machine"/>
             <TextBlock x:Name="StorageText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{StaticResource Muted}"/></DockPanel></Border>
-      </Grid>
+      </Grid></Border></ScrollViewer>
 
       <!-- Info -->
       <ScrollViewer x:Name="PageInfo" Style="{StaticResource Page}" Visibility="Collapsed" VerticalScrollBarVisibility="Auto"><StackPanel Margin="36,30,36,30">

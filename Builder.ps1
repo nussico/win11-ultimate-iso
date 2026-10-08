@@ -182,10 +182,11 @@ function Update-Editions {
     $all = @($names)
     if ($ui.UseUup.IsChecked) { $all += @($UupEditions.Keys | Where-Object { $_ -notin $names }) }
     $ui.EditionPanel.Children.Clear(); $script:edChecks = [ordered]@{}
+    $ui.UupOptions.IsEnabled = [bool]$ui.UseUup.IsChecked; $ui.UupOptions.Opacity = if ($ui.UseUup.IsChecked) { 1 } else { 0.45 }
     $prevEdition = $ui.Edition.SelectedItem
     $ui.Edition.Items.Clear()
     foreach ($e in $all) {
-        $label = if ($e -in $names) { $e } else { "$e  (UUP)" }
+        $label = if ($e -in $names) { $e } else { "$e  (download)" }
         $script:edChecks[$e] = New-Check $label 'Chip' ($e -in $checked)
         $script:edChecks[$e].Add_Click({ Update-Summary; Update-BuildHint })
         $ui.EditionPanel.Children.Add($script:edChecks[$e]) | Out-Null
@@ -210,7 +211,7 @@ function Update-BuildHint {
 }
 
 # --- Patches ---
-$patchChecks = @{}
+$patchChecks = @{}; $patchHeads = @{}; $patchHeadText = @{}   # section headers show "on/total"
 $patchCols = $ui.PatchCol0, $ui.PatchCol1, $ui.PatchCol2
 $colRows = @(0, 0, 0)   # patches per column; each card goes to the shortest column
 foreach ($g in $Patches.Values.Group | Select-Object -Unique) {   # catalog order
@@ -218,6 +219,7 @@ foreach ($g in $Patches.Values.Group | Select-Object -Unique) {   # catalog orde
     $sp = New-Object Windows.Controls.StackPanel
     $h = New-Object Windows.Controls.TextBlock -Property @{ Text = $g.ToUpper(); Style = $win.FindResource('Section') }
     if ($g -eq 'Aggressive') { $h.Foreground = $win.FindResource('Danger'); $h.Text = 'AGGRESSIVE - CAN BREAK APPS/UPDATES' }
+    $patchHeads[$g] = $h; $patchHeadText[$g] = $h.Text
     $sp.Children.Add($h) | Out-Null
     # Aggressive gets its own full-width row under the columns so the risky patches stand apart.
     $wide = $g -eq 'Aggressive'
@@ -241,9 +243,25 @@ $ui.BrowseDrivers.Add_Click({ Select-Folder $ui.DriversPath })
 # --- Unattended ---
 foreach ($tz in [TimeZoneInfo]::GetSystemTimeZones()) { $ui.TimeZone.Items.Add($tz.Id) | Out-Null }
 $ui.TimeZone.SelectedItem = (Get-TimeZone).Id
-function Set-UnattendBody { $on = [bool]$ui.UnattendOn.IsChecked; $ui.UnattendBody.IsEnabled = $on; $ui.UnattendBody.Opacity = if ($on) { 1 } else { 0.4 } }
+# Off: only the switch card shows. On: the options appear and the switch card gets an accent border.
+function Set-UnattendBody {
+    $on = [bool]$ui.UnattendOn.IsChecked
+    $ui.UnattendBody.Visibility = if ($on) { 'Visible' } else { 'Collapsed' }
+    $ui.UnattendCard.BorderBrush = $win.FindResource($(if ($on) { 'Accent' } else { 'Line' }))
+}
 Set-UnattendBody
 $ui.UnattendOn.Add_Checked({ Set-UnattendBody }); $ui.UnattendOn.Add_Unchecked({ Set-UnattendBody })
+# The install card only turns red while a disk-wiping option is picked.
+$diskHintOff = 'Off: you pick the disk in setup as usual. Best SSD and Disk 0 install without asking and wipe that disk.'
+$diskHintOn = $ui.DiskHint.Text
+function Set-DiskWarning {
+    $wipe = [string]$ui.AutoInstall.SelectedItem.Tag -ne 'Off'
+    $ui.InstallCard.BorderBrush = $win.FindResource($(if ($wipe) { 'Danger' } else { 'Line' }))
+    $ui.DiskHint.Foreground = $win.FindResource($(if ($wipe) { 'Danger' } else { 'Muted' }))
+    $ui.DiskHint.Text = if ($wipe) { $diskHintOn } else { $diskHintOff }
+}
+Set-DiskWarning
+$ui.AutoInstall.Add_SelectionChanged({ Set-DiskWarning })
 
 # Apps: search winget on this PC, click a result to add it; click an added app (unchecks) to remove it.
 function Add-App($Name, $Id) {
@@ -316,6 +334,7 @@ function Set-Preset($Name) {
 function Update-Summary {
     $ed = @($script:edChecks.Keys | Where-Object { $script:edChecks[$_].IsChecked }).Count
     $pa = @($patchChecks.Values | Where-Object IsChecked).Count
+    foreach ($g in $patchHeads.Keys) { $ids = @($Patches.Keys | Where-Object { $Patches[$_].Group -eq $g }); $patchHeads[$g].Text = "$($patchHeadText[$g])   $(@($ids | Where-Object { $patchChecks[$_].IsChecked }).Count)/$($ids.Count)" }
     $ui.Summary.Text = "$ed editions, $($ui.BaseLang.SelectedItem), $pa patches" + $(if ($ui.UnattendOn.IsChecked) { ', unattended' } else { '' })
     if ($win.IsLoaded) { Update-TopBar }
 }
@@ -519,7 +538,7 @@ function Update-Plan {
         Add-PlanRow 'Editions' ($cfg.Editions -join ', ')
         Add-PlanRow 'Language' $cfg.BaseLang
         Add-PlanRow 'Patches' "$($cfg.Patches.Count) selected"
-        $setup = if (-not $cfg.Unattend.Enabled) { 'Normal Windows setup' } elseif ($cfg.Unattend.AutoInstall -eq 'BestSsd') { 'Installs by itself onto the best SSD' } else { 'Unattended: account and settings preset' }
+        $setup = if (-not $cfg.Unattend.Enabled) { 'Normal Windows setup' } elseif ($cfg.Unattend.AutoInstall -eq 'BestSsd') { 'Installs by itself onto the best SSD' } elseif ($cfg.Unattend.AutoInstall -eq 'Disk0') { 'Installs by itself onto disk 0 (wipes it)' } else { 'Unattended: account and settings preset' }
         Add-PlanRow 'Setup' $setup
     } catch { Add-PlanNotice "Plan not available: $_" $brush.Danger }
 }
@@ -632,7 +651,7 @@ for ($i = 1; $i -le 9; $i++) {
     [Windows.Controls.DockPanel]::SetDock($rail, 'Left')
     $time = New-Object Windows.Controls.TextBlock -Property @{ FontSize = 11; Margin = '8,2,0,0'; Foreground = $brush.Muted }
     [Windows.Controls.DockPanel]::SetDock($time, 'Right')
-    $name = New-Object Windows.Controls.TextBlock -Property @{ Text = $steps[$i - 1].Name; Margin = '10,1,0,6'; TextTrimming = 'CharacterEllipsis'; TextWrapping = 'NoWrap' }
+    $name = New-Object Windows.Controls.TextBlock -Property @{ Text = $steps[$i - 1].Name; Margin = '10,1,0,0'; TextTrimming = 'CharacterEllipsis'; TextWrapping = 'NoWrap' }
     foreach ($c in $rail, $time, $name) { $row.Children.Add($c) | Out-Null }
     $ui.StepList.Children.Add($row) | Out-Null
     $script:stepRows += @{ N = $i; Line = $line; Halo = $halo; Scale = $scale; Dot = $dot; Mark = $mark; Name = $name; Time = $time }
