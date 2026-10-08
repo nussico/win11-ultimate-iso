@@ -144,7 +144,7 @@ function Invoke-Build($Cfg, $Sync) {
     try {
         Write-BuildHeader $Cfg
         Enter-Step 1 'Preflight'
-        $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole('Administrators')
+        $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
         if (-not $isAdmin) { throw 'Must run as administrator' }
         Assert-FreeSpace $w $true   # full check once step 2 knows whether the cached image is reused
         Write-Log "Free space on $($w.Substring(0,2)): $([math]::Round((Get-PSDrive $w.Substring(0, 1)).Free/1GB)) GB"

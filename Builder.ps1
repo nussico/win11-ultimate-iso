@@ -1,6 +1,6 @@
 # Win11 Ultimate ISO Builder - GUI entry point (WPF).
 # Always runs in elevated Windows PowerShell 5.1 (STA, needed by WPF).
-$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole('Administrators')
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin -or $PSVersionTable.PSEdition -ne 'Desktop') {
     # conhost --headless: no console window, even when Windows Terminal is the default terminal
     Start-Process conhost.exe -Verb RunAs -ArgumentList "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File `"$PSCommandPath`""

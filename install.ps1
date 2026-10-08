@@ -7,10 +7,11 @@
 
     # Not admin: rerun this installer in an elevated Windows PowerShell (UAC prompt). The elevated process doesn't
     # inherit our environment, so W11UB_DIR from the Update button is passed along in the command.
-    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole('Administrators')
+    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if (-not $isAdmin -and $env:W11UB_ELEVATED) { throw 'Still no admin rights after the UAC prompt.' }   # never loop
     if (-not $isAdmin) {
         Write-Host 'Win11 Ultimate ISO Builder needs admin rights - confirm the UAC prompt.' -ForegroundColor Cyan
-        $cmd = "try { $(if ($env:W11UB_DIR) { "`$env:W11UB_DIR = '$($env:W11UB_DIR -replace "'", "''")'; " })irm https://raw.githubusercontent.com/$repo/main/install.ps1 | iex } " +
+        $cmd = "try { `$env:W11UB_ELEVATED = '1'; $(if ($env:W11UB_DIR) { "`$env:W11UB_DIR = '$($env:W11UB_DIR -replace "'", "''")'; " })irm https://raw.githubusercontent.com/$repo/main/install.ps1 | iex } " +
             "catch { Write-Host `$_ -ForegroundColor Red; Read-Host 'Install failed. Press Enter to close' }"
         $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
         try { Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $enc" }
