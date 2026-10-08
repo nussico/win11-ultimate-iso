@@ -566,7 +566,10 @@ function Update-Plan {
         $ui.PlanStats.Children.Add((New-PlanStat "$need GB" "disk space, $free GB free on $($root.Substring(0, 2))" $(if ($free -lt $need) { $brush.Danger } else { $brush.Text }))) | Out-Null
         if ($free -lt $need) { Add-PlanNotice "Not enough disk space: free up $($need - $free) GB on $($root.Substring(0, 2))." $brush.Danger }
 
-        if ($p.Base) { Add-PlanRow 'Windows' "Your ISO, build $($p.Base.Build)" (Split-Path $p.Base.Path -Leaf) }
+        if ($p.Base) {
+            $ver = Get-ReleaseVersion (Select-UupBuild $script:UupBuilds $p.Base.Build)
+            Add-PlanRow 'Windows' "Your ISO, $(if ($ver) { "$ver, " })build $($p.Base.Build)" (Split-Path $p.Base.Path -Leaf)
+        }
         if ($p.Missing -and $p.Uup) {
             Add-PlanRow 'Windows' "$($p.Uup.title)" $(if ($cfg.Fast) { 'download, fast mode (updates install after setup)' } else { 'download incl. the latest update' })
         }

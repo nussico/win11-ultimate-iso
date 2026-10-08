@@ -186,7 +186,7 @@ Assert ((Get-BuildPlan @($fastIso) $builds $c).Base) 'Plan: Fast-mode ISO used w
 $q = Get-UupRequest @('Windows 11 Pro') $true
 Assert ($q.Body -match 'updates=0' -and $q.Updates -eq 0 -and $q.Edition -eq 'PROFESSIONAL' -and $q.Body -match 'autodl=2') 'Fast mode: no update integration'
 $q = Get-UupRequest @('Windows 11 Home', 'Windows 11 Enterprise') $false
-Assert ($q.Body -match 'updates=1' -and $q.Edition -eq 'CORE;PROFESSIONAL' -and $q.Body -match 'autodl=3' -and $q.Body -match 'virtualEditions\[\]=Enterprise') 'Normal mode + virtual edition adds Pro base'
+Assert ($q.Body -match 'updates=1' -and $q.Edition -eq 'CORE;PROFESSIONAL' -and $q.Body -match 'autodl=3' -and $q.Body -match 'cleanup=1' -and $q.Body -match 'virtualEditions\[\]=Enterprise') 'Normal mode + virtual edition adds Pro base'
 
 # Preset file: choices only, never secrets or paths
 $pd = Get-PresetData @{ BaseLang = 'de-de'; Editions = @('Windows 11 Pro'); Patches = @('hwchecks'); IsoFolder = 'D:\isos'; Output = 'D:\out\x.iso'

@@ -130,7 +130,8 @@ function Get-UupRequest([string[]]$EditionNames, [bool]$Fast) {
         Edition = $direct -join ';'
         Virtual = $virtual
         Updates = [int](-not $Fast)
-        Body    = "autodl=$(if ($virtual) { 3 } else { 2 })&updates=$([int](-not $Fast))&cleanup=0" + (($virtual | ForEach-Object { "&virtualEditions[]=$_" }) -join '')
+        # cleanup=1 (+ ResetBase in Save-UupIso): drop the files the update replaced, otherwise ~6 GB more per edition
+        Body    = "autodl=$(if ($virtual) { 3 } else { 2 })&updates=$([int](-not $Fast))&cleanup=1" + (($virtual | ForEach-Object { "&virtualEditions[]=$_" }) -join '')
     }
 }
 
@@ -145,7 +146,7 @@ function Save-UupIso($Uuid, $Lang, [string[]]$EditionNames, $Dest, [bool]$Fast, 
     Expand-Archive $zip $Dest -Force
     $ini = "$Dest\ConvertConfig.ini"
     (Get-Content $ini) -replace '^AutoExit\s*=.*', 'AutoExit    =1' -replace '^AddUpdates\s*=.*', "AddUpdates   =$($req.Updates)" `
-        -replace '^vAutoEditions=.*', "vAutoEditions=$($req.Virtual -join ',')" | Set-Content $ini
+        -replace '^ResetBase\s*=.*', 'ResetBase  =1' -replace '^vAutoEditions=.*', "vAutoEditions=$($req.Virtual -join ',')" | Set-Content $ini
     # stdin from NUL so any 'pause' returns immediately; .\ because NoDefaultCurrentDirectoryInExePath=1 hides the folder from cmd
     $p = Start-Process cmd.exe -ArgumentList '/c', '.\uup_download_windows.cmd < NUL' -WorkingDirectory $Dest -PassThru -WindowStyle Minimized
     $null = $p.Handle   # keeps ExitCode readable after the process ends
