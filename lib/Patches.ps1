@@ -102,8 +102,9 @@ $Patches = [ordered]@{
         Desc = 'Removes the Task View button from the taskbar. Win+Tab still works.'; Reg = @(
             'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|ShowTaskViewButton|0') }
     nowidgets    = @{ Group = 'Taskbar & Start'; Label = 'Disable widgets'
-        Desc = 'Removes the news and weather widgets board from the taskbar.'; Reg = @(
-            'SOFTWARE\Policies\Microsoft\Dsh|AllowNewsAndInterests|0') }
+        # Not the AllowNewsAndInterests policy: Windows denies writing Policies\Microsoft\Dsh even to an offline image.
+        Desc = 'Removes the news and weather widgets board (Windows Web Experience Pack). The Store can bring it back.'
+        Action = { param($m, $c) Remove-Apps $m @('MicrosoftWindows.Client.WebExperience') } }
     startpins    = @{ Group = 'Taskbar & Start'; Label = 'More pins in Start'
         Desc = 'Start menu shows an extra row of pinned apps and fewer recommendations.'; Reg = @(
             'DEFAULT\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|Start_Layout|1') }
@@ -342,10 +343,10 @@ function Set-OfflineReg([string[]]$Entries) {
         $path, $name, $value = $e -split '\|'
         $key = Convert-RegPath $path
         if ($value -eq '-') { reg delete $key /v $name /f 2>&1 | Out-Null; Write-Log "  reg delete $path\$name" }
-        elseif ($name -eq '@') { reg add $key /ve /f 2>&1 | Out-Null; if ($LASTEXITCODE) { throw "reg add failed: $e" }; Write-Log "  reg $path\(Default) = (empty)" }   # empty default value
+        elseif ($name -eq '@') { $out = reg add $key /ve /f 2>&1; if ($LASTEXITCODE) { throw "reg add failed: $e ($out)" }; Write-Log "  reg $path\(Default) = (empty)" }   # empty default value
         else {
             $type, $data = if ($value -like 'sz:*') { 'REG_SZ', $value.Substring(3) } else { 'REG_DWORD', $value }
-            reg add $key /v $name /t $type /d $data /f 2>&1 | Out-Null; if ($LASTEXITCODE) { throw "reg add failed: $e" }; Write-Log "  reg $path\$name = $value"
+            $out = reg add $key /v $name /t $type /d $data /f 2>&1; if ($LASTEXITCODE) { throw "reg add failed: $e ($out)" }; Write-Log "  reg $path\$name = $value"
         }
         if ($script:Report) { $script:Report.Reg++ }
     }

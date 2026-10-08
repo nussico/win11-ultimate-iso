@@ -206,6 +206,7 @@ function Invoke-Build($Cfg, $Sync) {
         }
         # For 'Stay on this Windows version'; without UUP data the patch reads the image's own version.
         $Cfg.ReleaseVersion = if ($uup) { Get-ReleaseVersion $uup } else { Get-ReleaseVersion (Select-UupBuild $builds $base.Build) }
+        if (-not $Cfg.ReleaseVersion -and $base.Fast) { $Cfg.ReleaseVersion = 'unknown' }   # its image version is the older base: don't pin that
         $drive = Mount-SourceIso $base.Path
         Write-Log "Copying $($base.Path)"
         $ErrorActionPreference = 'Continue'

@@ -200,7 +200,8 @@ $script:edChecks = [ordered]@{}
 function Update-Editions {
     # Keep ticks across rescans / language changes; none on start.
     $checked = @($script:edChecks.Keys | Where-Object { $script:edChecks[$_].IsChecked })
-    $iso = $script:IsoInfos | Where-Object Lang -eq $ui.BaseLang.SelectedItem | Select-Object -First 1
+    $use = @{ UseUup = [bool]$ui.UseUup.IsChecked; Fast = [bool]$ui.Fast.IsChecked }
+    $iso = $script:IsoInfos | Where-Object { $_.Lang -eq $ui.BaseLang.SelectedItem -and (Test-UsableIso $_ $use) } | Select-Object -First 1
     $names = @($iso.Editions.Name | Where-Object { $_ })
     $all = @($names)
     if ($ui.UseUup.IsChecked) { $all += @($UupEditions.Keys | Where-Object { $_ -notin $names }) }
@@ -435,6 +436,7 @@ function Invoke-Scan {
 $ui.ScanIsos.Add_Click({ if ($script:job) { Show-Msg 'Wait until the build is finished.' | Out-Null; return }; Invoke-Scan })
 $ui.BaseLang.Add_SelectionChanged({ Update-Editions })
 $ui.UseUup.Add_Click({ Update-Editions })
+$ui.Fast.Add_Click({ Update-Editions })
 $ui.Build.Add_SelectionChanged({ Update-BuildHint })
 $ui.Newest.Add_Click({ Update-BuildHint })
 

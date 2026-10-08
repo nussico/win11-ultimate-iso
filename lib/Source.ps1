@@ -45,17 +45,22 @@ function Get-SourceIsos($Folder) {
         try {
             $info = Get-IsoInfo $iso.FullName
             # Fast-mode UUP ISOs hold the older base build (e.g. 26100); the sidecar records the release they came from.
-            if (Test-Path "$($iso.FullName).build") { $info.Build = (Get-Content "$($iso.FullName).build").Split('.')[0] }
-            $info
+            # Fast = the image is older than the release (Windows Update finishes the job after setup).
+            $release = if (Test-Path "$($iso.FullName).build") { (Get-Content "$($iso.FullName).build").Split('.')[0] } else { $info.Build }
+            $info | Add-Member Fast ($release -ne $info.Build) -PassThru | Add-Member Build $release -Force -PassThru
         } catch { Write-Warning "$($iso.Name): $_" }
     }
 }
+
+# A Fast-mode ISO holds the old base image (e.g. 24H2 for a 26H2 download): with Fast mode off and UUP on, a full
+# download replaces it instead of mixing its editions and setup files into a full build. Without UUP it's all there is.
+function Test-UsableIso($Iso, $Cfg) { -not ($Iso.Fast -and $Cfg.UseUup -and -not $Cfg.Fast) }
 
 # What a build will use: base ISO, editions to download, UUP build. Shared by the build and the GUI's plan.
 function Get-BuildPlan($Isos, $Builds, $Cfg) {
     $p = @{ Base = $null; Newest = (Select-NewestUupBuild $Builds); Missing = @(); Uup = $null; Note = $null; Error = $null; Skipped = $null }
     if ($Cfg.Newest -and -not $Cfg.UupBuild) { $p.Skipped = Get-SkippedNewerRelease $Builds $p.Newest }
-    $p.Base = $Isos | Where-Object Lang -eq $Cfg.BaseLang | Sort-Object { [int]$_.Build } -Descending | Select-Object -First 1
+    $p.Base = $Isos | Where-Object { $_.Lang -eq $Cfg.BaseLang -and (Test-UsableIso $_ $Cfg) } | Sort-Object { [int]$_.Build } -Descending | Select-Object -First 1
     if ($Cfg.Newest -and $p.Base -and $p.Newest -and [int]$p.Base.Build -lt [int]$p.Newest.build.Split('.')[0]) {
         if ($Cfg.UseUup) { $p.Note = "Your ISO is build $($p.Base.Build) (older version): downloading the newest instead"; $p.Base = $null }
         else { $p.Note = "NOTE: a newer Windows version exists ($($p.Newest.title)); turn on UUP dump to use it" }

@@ -156,6 +156,14 @@ Assert ((Get-BuildPlan @() $builds $c).Error -match 'No ISO') 'Plan: no ISO and 
 $c.UseUup = $true; $c.Editions = @('Windows 11 Home', 'Windows 11 Pro')
 $pl = Get-BuildPlan @(I 26300 'Windows 11 Pro') $builds $c
 Assert ($pl.Base -and $pl.Missing -eq 'Windows 11 Home' -and $pl.Uup.build -like '26300.*') 'Plan: missing edition downloaded for the ISO build'
+$fastIso = I 26300 'Windows 11 Pro' | Add-Member Fast $true -PassThru
+$c.Fast = $false
+$pl = Get-BuildPlan @($fastIso) $builds $c
+Assert (-not $pl.Base -and $pl.Missing.Count -eq 2) 'Plan: Fast-mode ISO not mixed into a full build'
+$c.Fast = $true
+Assert ((Get-BuildPlan @($fastIso) $builds $c).Base) 'Plan: Fast-mode ISO reused in Fast mode'
+$c.UseUup = $false; $c.Fast = $false
+Assert ((Get-BuildPlan @($fastIso) $builds $c).Base) 'Plan: Fast-mode ISO used when UUP is off (only source)'
 
 $q = Get-UupRequest @('Windows 11 Pro') $true
 Assert ($q.Body -match 'updates=0' -and $q.Updates -eq 0 -and $q.Edition -eq 'PROFESSIONAL' -and $q.Body -match 'autodl=2') 'Fast mode: no update integration'
