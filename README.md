@@ -29,13 +29,18 @@ Moved the folder? Right-click `Builder.ps1` > *Run with PowerShell* once to fix 
   "Newest" means the newest version for every PC: versions only for certain new PCs (like 26H1) are skipped,
   but you can pick them under *Windows version*.
   *Fast mode* (default) skips merging the latest update: about 15 instead of 60 minutes, and Windows Update catches up after setup.
-- **Editions and language**: Home, Pro, Education, Enterprise. One language per ISO.
+- **Editions and language**: Home, Pro, Education, Enterprise. One language per ISO. With UUP dump on, the build uses an ISO with exactly
+  the ticked editions: tick only Pro and it downloads a Pro-only ISO once (kept in `sources` next to the others).
 - **Patches**: no TPM/Secure Boot/CPU checks, local account, debloat, privacy, taskbar, Explorer, gaming and update tweaks.
+  Optional: WSL, Hyper-V, Windows Sandbox, .NET 3.5, stay on this Windows version, no reserved storage.
   Essential apps (Store, winget, Calculator, Photos, Xbox login, Game Bar...) are never removed.
+- **Patch mode**: *Into the image* (default, about 10 min per edition) or *During Windows setup* (like CTT's Win11 Creator):
+  the ISO is ready in about 5 minutes and the patches run once while Windows installs (log: `C:\Windows\Setup\Scripts\Win11Ultimate-patches.log`).
 - **Unattended setup**: account, timezone, keyboard, product key, Wi-Fi, winget apps (Steam, Discord...) and your own script after first login.
 - **Automatic install**: *Best SSD* picks the fastest internal disk and installs with a 10 s cancel countdown.
 - **Presets**: Basic, Recommended, CTT, Extreme, or your own: *Save* puts them in the `presets` folder and they show up in the preset list (drop shared `.json` presets there too). *Last build* repeats your last settings.
 - **Fast rebuilds**: the finished image is cached, so changing only setup options takes a few minutes.
+- **Plan**: the Build page shows the Windows version (e.g. 25H2), what gets downloaded, build time and disk space before you start.
 - **Test in VM**: one click boots the ISO in Hyper-V.
 
 Every ISO is named `W11U_<version>` and contains `Win11Ultimate.txt` (what was built) and a preset you can load to build it again.

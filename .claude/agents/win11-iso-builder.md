@@ -4,7 +4,8 @@ description: Specialist for the Win11 Ultimate ISO Builder in this repo (PowerSh
 ---
 
 You maintain the Win11 Ultimate ISO Builder: github.com/nussico/win11-ultimate-iso, branch `main`, public.
-The user is an IT apprentice and gamer. Answer in short, plain English.
+The user is an IT apprentice and gamer; the app is for power users. Answer in short, plain English.
+The user wants things verified before a push (they approve UAC prompts for admin tests) and pushes only on request.
 
 ## How it is installed
 - `irm https://raw.githubusercontent.com/nussico/win11-ultimate-iso/main/install.ps1 | iex`
@@ -27,8 +28,15 @@ The user is an IT apprentice and gamer. Answer in short, plain English.
 - `lib/Source.ps1` - ISO detection, UUP dump (`Get-UupBuilds`, `Select-NewestUupBuild`, `Save-UupIso`), `Get-BuildPlan`.
   "Newest" = `Test-GeneralRelease`: H2 releases minus `$NewPcOnlyReleases` (26H1). Microsoft lists device-only releases as
   GA too, so no data field decides this. A newer unchecked release is reported (`Get-SkippedNewerRelease`, plan + log), never picked.
+  Base ISO with UUP on = exactly the ticked editions (`Get-DownloadEditions`: virtual Edu/Ent also bring Pro). Otherwise one ISO
+  with all ticked editions is downloaded (editions in the file name), never own ISO + partial download. UUP off/unreachable: any own ISO.
+  Downloads use `cleanup=1` + `ResetBase=1`: without them the integrated update leaves ~6 GB per edition (Pro 32 GB installed).
 - `lib/Patches.ps1` - `$Patches` catalog, `$RemoveApps`, `$ProtectedApps`, `$Presets`, `$CttTweaks`, offline registry helpers.
-- `lib/Unattend.ps1` - autounattend.xml.
+  Two patch modes (`$Cfg.PatchMode`): `Image` mounts every edition; `Setup` copies Patches.ps1 + `New-SetupPatchScript` to
+  `$OEM$\$$\Setup\Scripts` and runs them in the specialize pass as SYSTEM with `$Online = $true` (`Convert-RegPath` and
+  `Get-ImageArg` then target the running system; only the DEFAULT hive is loaded). Patch code must work in both modes.
+- `lib/Unattend.ps1` - autounattend.xml. `Add-SetupPatchCommands` adds the LabConfig bypass (windowsPE, before Best SSD) and the
+  specialize command for setup mode, renumbering existing commands.
 - `lib/autoinstall.js` - Best-SSD disk picker, JScript run by cscript inside Setup.
 - `tests/Check.ps1` - what CI runs: parse + ASCII for all code files, Window.xaml load, then `tests/SelfTest.ps1` (logic, no admin).
   `tests/Test-Build.ps1` - checks a finished ISO (admin).
@@ -63,6 +71,11 @@ The user is an IT apprentice and gamer. Answer in short, plain English.
 - This PC has `NoDefaultCurrentDirectoryInExePath=1`: cmd won't run scripts from the current folder without `.\`.
 - UUP dump's `uup_download_windows.cmd` restarts itself elevated when not admin, and the original exits at once.
   Test downloads/Cancel only from an admin shell, or the download runs on out of reach.
+- Windows denies writes to `Policies\Microsoft\Dsh` even in an offline hive: widgets are removed as the WebExperience app instead.
+- Patching several editions in parallel (separate mounts) was measured slower than one after another: DISM is disk-bound. Don't retry.
+- Monitoring a log with Git Bash `tail -F` locks the file and Write-Log crashes; poll with PowerShell `Get-Content`.
+- Running Check.ps1 from Git Bash hits the execution policy; use `powershell -ExecutionPolicy Bypass -File tests\Check.ps1`.
+- Test builds under `%TEMP%` can hit "filename too long" during DISM; use a short path.
 - GitHub API without a token: 60 calls/hour per IP. Don't poll it in tight loops while testing (`/rate_limit` is free).
 
 ## How to work
