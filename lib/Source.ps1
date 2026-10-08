@@ -53,7 +53,8 @@ function Get-SourceIsos($Folder) {
 
 # What a build will use: base ISO, editions to download, UUP build. Shared by the build and the GUI's plan.
 function Get-BuildPlan($Isos, $Builds, $Cfg) {
-    $p = @{ Base = $null; Newest = (Select-NewestUupBuild $Builds); Missing = @(); Uup = $null; Note = $null; Error = $null }
+    $p = @{ Base = $null; Newest = (Select-NewestUupBuild $Builds); Missing = @(); Uup = $null; Note = $null; Error = $null; Skipped = $null }
+    if ($Cfg.Newest -and -not $Cfg.UupBuild) { $p.Skipped = Get-SkippedNewerRelease $Builds $p.Newest }
     $p.Base = $Isos | Where-Object Lang -eq $Cfg.BaseLang | Sort-Object { [int]$_.Build } -Descending | Select-Object -First 1
     if ($Cfg.Newest -and $p.Base -and $p.Newest -and [int]$p.Base.Build -lt [int]$p.Newest.build.Split('.')[0]) {
         if ($Cfg.UseUup) { $p.Note = "Your ISO is build $($p.Base.Build) (older version): downloading the newest instead"; $p.Base = $null }
@@ -85,10 +86,29 @@ function Select-UupBuild($Builds, $Major) {
         Sort-Object { [version]"10.0.$($_.build)" } -Descending | Select-Object -First 1
 }
 
-# Newest general release: highest "Windows 11, version YYH2" build, newest revision.
-# ponytail: H2-only rule skips hardware-only releases like 26H1; revisit if Microsoft ships a general H1 again.
+# Releases that ship only on specific new PCs. Microsoft lists them as "General Availability Channel" too, so no
+# data says so: checked by hand on learn.microsoft.com/windows/release-health/windows11-release-information.
+$NewPcOnlyReleases = @('26H1')
+
+# Version of a released build ("25H2"), $null for previews, updates and other titles.
+function Get-ReleaseVersion($Build) { if ($Build.title -match '^Windows 11, version (\d\dH\d) \(') { $Matches[1] } }
+
+# General release = every PC gets it. Rule: H2 releases (yearly, for everyone), never the known new-PC-only ones.
+# Fails safe: an unknown general H1 is skipped (older but working), and Get-SkippedNewerRelease reports it.
+function Test-GeneralRelease($Build) { ($v = Get-ReleaseVersion $Build) -and $v -like '*H2' -and $v -notin $NewPcOnlyReleases }
+
+# Newest general release: highest build, newest revision.
 function Select-NewestUupBuild($Builds) {
-    $Builds | Where-Object { $_.title -match '^Windows 11, version \d\dH2 ' } |
+    $Builds | Where-Object { Test-GeneralRelease $_ } |
+        Sort-Object { [version]"10.0.$($_.build)" } -Descending | Select-Object -First 1
+}
+
+# A newer release the rule skipped and nobody has checked yet (e.g. a general 27H1): shown in the plan and the log
+# instead of being ignored. Add it to $NewPcOnlyReleases or change Test-GeneralRelease once it's clear what it is.
+function Get-SkippedNewerRelease($Builds, $Newest) {
+    if (-not $Newest) { return }
+    $Builds | Where-Object { ($v = Get-ReleaseVersion $_) -and $v -notin $NewPcOnlyReleases -and -not (Test-GeneralRelease $_) -and
+        [int]$_.build.Split('.')[0] -gt [int]$Newest.build.Split('.')[0] } |
         Sort-Object { [version]"10.0.$($_.build)" } -Descending | Select-Object -First 1
 }
 

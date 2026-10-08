@@ -113,13 +113,13 @@ Start-Background {
     if ($r = $out | Select-Object -First 1) {
         $script:UupBuilds = @($r.Builds)
         if ($r.Langs) { Set-Languages $r.Langs }
-        # The 5 newest updates of every version, general (H2) releases first; H1 ships only on new hardware.
+        # The 5 newest updates of every version, general releases first (Test-GeneralRelease decides, see lib\Source.ps1).
         $script:buildList = @($script:UupBuilds | Where-Object title -like 'Windows 11, version*' |
-            Sort-Object @{ e = { $_.title -match ' \d\dH2 ' }; Descending = $true }, @{ e = { [version]"10.0.$($_.build)" }; Descending = $true } |
+            Sort-Object @{ e = { [version]"10.0.$($_.build)" }; Descending = $true } |
             Group-Object { $_.title -replace '^Windows 11, version (\S+).*', '$1' } |
-            Sort-Object @{ e = { $_.Name -like '*H2' }; Descending = $true }, @{ e = { [version]"10.0.$($_.Group[0].build)" }; Descending = $true } |
+            Sort-Object @{ e = { Test-GeneralRelease $_.Group[0] }; Descending = $true }, @{ e = { [version]"10.0.$($_.Group[0].build)" }; Descending = $true } |
             ForEach-Object { $_.Group | Select-Object -First 5 })
-        foreach ($b in $script:buildList) { $ui.Build.Items.Add($b.title + $(if ($b.title -match ' \d\dH1 ') { '  - new PCs only' })) | Out-Null }
+        foreach ($b in $script:buildList) { $ui.Build.Items.Add($b.title + $(if ((Get-ReleaseVersion $b) -in $NewPcOnlyReleases) { '  - new PCs only' })) | Out-Null }
     }
     Update-BuildHint
     if ($ui.Nav.SelectedItem.Tag -eq 'PageBuild') { Update-Plan }
@@ -538,6 +538,7 @@ function Update-Plan {
         $p = Get-BuildPlan $script:IsoInfos $script:UupBuilds $cfg
         if ($p.Error) { Add-PlanNotice "Can't build yet: $($p.Error)" $brush.Danger }
         if ($p.Note) { Add-PlanNotice ($p.Note -replace '^NOTE: ', '') $brush.Warn }
+        if ($p.Skipped) { Add-PlanNotice "$($p.Skipped.title) is newer than the version picked automatically, but it's not known whether every PC gets it. To use it, pick it under 'Windows version' on the Source page." $brush.Warn }
         if ($script:scanning) { Add-PlanNotice 'Still scanning your ISOs - the plan updates when done.' $brush.Muted }
         if ($script:uupLoading -and $cfg.UseUup) { Add-PlanNotice 'Still loading the Windows versions from UUP dump - the plan updates when done.' $brush.Muted }
 

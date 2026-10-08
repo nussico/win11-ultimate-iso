@@ -179,6 +179,7 @@ function Invoke-Build($Cfg, $Sync) {
         $plan = Get-BuildPlan $found $(if ($Cfg.UseUup) { Get-UupBuilds } else { @() }) $Cfg
         if ($plan.Newest) { Write-Log "Newest Windows: $($plan.Newest.title)" }
         if ($plan.Note) { Write-Log $plan.Note }
+        if ($plan.Skipped) { Write-Log "NOTE: $($plan.Skipped.title) is newer but not picked automatically (not known to be for every PC); pick it under 'Windows version' to use it" }
         if ($plan.Error) { throw $plan.Error }
         $base = $plan.Base; $missing = $plan.Missing; $uup = $plan.Uup
         if ($uup) { Write-Log "UUP build: $($uup.title)" }

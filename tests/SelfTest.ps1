@@ -124,6 +124,15 @@ $builds += [pscustomobject]@{ title = 'Windows 11, version 24H2 (26100.9448)'; b
 Assert ((Select-NewestUupBuild $builds).uuid -eq 'b') 'Newest: 25H2 newest revision, skips 26H1 and previews'
 $builds += [pscustomobject]@{ title = 'Windows 11, version 26H2 (26300.1000)'; build = '26300.1000'; uuid = 'f' }
 Assert ((Select-NewestUupBuild $builds).uuid -eq 'f') 'Newest: switches to 26H2 once it exists'
+Assert (-not (Get-SkippedNewerRelease $builds (Select-NewestUupBuild $builds))) 'Newest: known new-PC-only 26H1 is no warning'
+$ins = @($builds) + [pscustomobject]@{ title = 'Windows 11, version 27H2 Insider Preview 10.0.29000.1 (rs_prerelease)'; build = '29000.1'; uuid = 'i' }
+Assert ((Select-NewestUupBuild $ins).uuid -eq 'f' -and -not (Get-SkippedNewerRelease $ins (Select-NewestUupBuild $ins))) 'Newest: Insider previews are neither picked nor reported'
+$h1 = @($builds) + [pscustomobject]@{ title = 'Windows 11, version 27H1 (28100.500)'; build = '28100.500'; uuid = 'g' }
+Assert ((Select-NewestUupBuild $h1).uuid -eq 'f' -and (Get-SkippedNewerRelease $h1 (Select-NewestUupBuild $h1)).uuid -eq 'g') 'Newest: unknown 27H1 is skipped but reported'
+$c = @{ BaseLang = 'de-de'; Editions = @('Windows 11 Pro'); UseUup = $true; Newest = $true; UupBuild = ''; IsoFolder = 'src' }
+Assert ((Get-BuildPlan @() $h1 $c).Skipped.uuid -eq 'g') 'Plan: reports the skipped newer release'
+$c.UupBuild = 'g'
+Assert (-not (Get-BuildPlan @() $h1 $c).Skipped -and (Get-BuildPlan @() $h1 $c).Uup.uuid -eq 'g') 'Plan: picking it by hand uses it, no warning'
 
 # Build plan (shared by build + GUI)
 function I($b, [string[]]$eds) { [pscustomobject]@{ Path = "x$b.iso"; Lang = 'de-de'; Build = "$b"; Editions = @($eds | ForEach-Object { [pscustomobject]@{ Name = $_ } }) } }
