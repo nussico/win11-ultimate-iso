@@ -192,21 +192,30 @@ Assert ((Get-BuildPlan @($fastIso) $builds $c).Base) 'Plan: Fast-mode ISO used w
 
 # Download source Microsoft
 $c = @{ BaseLang = 'de-de'; Editions = @('Windows 11 Pro'); UseUup = $true; Download = 'Microsoft'; Newest = $true; UupBuild = ''; IsoFolder = 'src' }
+$pl = Get-BuildPlan @($both) $builds $c
+Assert (-not $pl.Microsoft -and -not $pl.Base -and $pl.Missing -eq 'Windows 11 Pro' -and $pl.Uup.uuid -eq 'f' -and $pl.Note -match 'Smaller image but longer download') 'Microsoft: only Pro ticked, multi-edition ISO -> UUP download of a Pro image, with a note'
+Assert ((Get-BuildPlan @($both) @() $c).Base -eq $both) 'Microsoft: only Pro ticked, UUP dump unreachable -> multi-edition ISO is used'
+$c.UupBuild = 'a'
+Assert ((Get-BuildPlan @($both) $builds $c).Uup.uuid -eq 'f' -and $c.UupBuild -eq 'a') 'Microsoft: only Pro ticked, a build picked earlier under UUP dump is ignored'
+$c.UupBuild = ''
+Assert ((Test-MsSubset 'Windows 11 Pro') -and -not (Test-MsSubset $MsIsoEditions) -and -not (Test-MsSubset 'Windows 11 Pro', 'Windows 11 Enterprise')) 'Microsoft: only fewer of its own editions go to UUP dump'
+$c.Editions = $MsIsoEditions
+$all = I 26300 $MsIsoEditions; $all100 = I 26100 $MsIsoEditions
 $pl = Get-BuildPlan @() $builds $c
-Assert ($pl.Microsoft -and $pl.Missing -eq 'Windows 11 Pro' -and -not $pl.Uup -and -not $pl.Error) 'Microsoft: no ISO -> official ISO download'
+Assert ($pl.Microsoft -and $pl.Missing.Count -eq 3 -and -not $pl.Uup -and -not $pl.Error) 'Microsoft: no ISO -> official ISO download'
 Assert ((Get-BuildPlan @() @() $c).Microsoft) 'Microsoft: works without UUP dump'
 $pl = Get-UupFallbackPlan @() $builds $c
 Assert ($pl.Uup.uuid -eq 'f' -and -not $pl.Microsoft -and $c.Download -eq 'Microsoft') 'Microsoft refused: fallback plans the UUP download, config unchanged'
 Assert ((Get-UupFallbackPlan @() @() $c).Error) 'Microsoft refused and UUP dump unreachable: error'
-$pl = Get-BuildPlan @($both) $builds $c
-Assert ($pl.Base -eq $both -and -not $pl.Microsoft -and -not $pl.Missing) 'Microsoft: multi-edition ISO with the ticked edition is reused'
-$pl = Get-BuildPlan @(I 26100 'Windows 11 Pro') $builds $c
+$pl = Get-BuildPlan @($all) $builds $c
+Assert ($pl.Base -eq $all -and -not $pl.Microsoft -and -not $pl.Missing) 'Microsoft: ISO with the ticked editions is reused'
+$pl = Get-BuildPlan @($all100) $builds $c
 Assert ($pl.Microsoft -and $pl.Base -and -not $pl.Missing -and $pl.Note) 'Microsoft: older ISO kept, download only if Microsoft has newer'
 $c.Newest = $false
-Assert (-not (Get-BuildPlan @(I 26100 'Windows 11 Pro') $builds $c).Microsoft) 'Microsoft: older ISO used as-is when newest is off'
+Assert (-not (Get-BuildPlan @($all100) $builds $c).Microsoft) 'Microsoft: older ISO used as-is when newest is off'
 $c.Editions = @('Windows 11 Pro', 'Windows 11 Enterprise')
 Assert ((Get-BuildPlan @() $builds $c).Error -match 'Enterprise') 'Microsoft: Enterprise is not in the official ISO -> error'
-$c.Editions = @('Windows 11 Pro'); $c.BaseLang = 'xx-xx'
+$c.Editions = $MsIsoEditions; $c.BaseLang = 'xx-xx'
 Assert ((Get-BuildPlan @() $builds $c).Error -match 'no ISO in xx-xx') 'Microsoft: unknown language -> error'
 Assert (-not ($MsIsoLanguages.Keys | Where-Object { $_ -cne $_.ToLower() }) -and $MsIsoLanguages.Count -ge 38) 'Microsoft: language map uses lower-case codes'
 Assert (-not ($MsIsoEditions | Where-Object { -not $UupEditions.Contains($_) })) 'Microsoft: its editions are known editions'

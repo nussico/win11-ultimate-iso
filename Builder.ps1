@@ -270,8 +270,9 @@ function Update-Editions {
 
 # Spells out which build "Auto" resolves to (same logic as the build plan).
 function Update-BuildHint {
-    if ($ui.Download.SelectedItem.Tag -eq 'Microsoft') { $ui.BuildHint.Text = 'Microsoft: the newest release as on microsoft.com. Pick UUP dump to choose a build.'; return }
-    if ($ui.Build.SelectedIndex -gt 0) { $ui.BuildHint.Text = 'Downloads exactly this build when editions are missing.'; return }
+    $ms = $ui.Download.SelectedItem.Tag -eq 'Microsoft'
+    if ($ms -and -not (Test-MsSubset (Get-Config).Editions)) { $ui.BuildHint.Text = 'Microsoft: the newest release as on microsoft.com. Pick UUP dump to choose a build.'; return }
+    if (-not $ms -and $ui.Build.SelectedIndex -gt 0) { $ui.BuildHint.Text = 'Downloads exactly this build when editions are missing.'; return }
     if ($script:uupLoading) { $ui.BuildHint.Text = 'Loading the build list from UUP dump...'; return }
     try {
         $p = Get-BuildPlan $script:IsoInfos $script:UupBuilds (Get-Config)

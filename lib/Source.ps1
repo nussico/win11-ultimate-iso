@@ -56,18 +56,30 @@ function Get-SourceIsos($Folder) {
 # instead of mixing its editions and setup files into the build. Without UUP it's all there is.
 function Test-UsableIso($Iso, $Cfg) { -not ($Iso.Fast -and $Cfg.UseUup) }
 
+# Microsoft's ISO always holds Home, Pro and Education. Fewer of them ticked (e.g. only Pro) -> UUP dump gets an image
+# with just those. Editions Microsoft doesn't have (Enterprise) stay an error in Get-MicrosoftPlan.
+function Test-MsSubset($Editions) {
+    $want = @(Get-DownloadEditions $Editions)
+    -not ($want | Where-Object { $_ -notin $MsIsoEditions }) -and $want.Count -lt $MsIsoEditions.Count
+}
+
 # What a build will use: base ISO, editions to download, UUP build. Shared by the build and the GUI's plan.
 function Get-BuildPlan($Isos, $Builds, $Cfg) {
+    $msSource = $Cfg.UseUup -and $Cfg.Download -eq 'Microsoft'
+    $msSubset = $msSource -and $Builds -and (Test-MsSubset $Cfg.Editions)
+    # The build picker is off for Microsoft: a build picked earlier under UUP dump must not pin this download.
+    if ($msSubset) { $Cfg = $Cfg.Clone(); $Cfg.UupBuild = '' }
     $p = @{ Base = $null; Newest = (Select-NewestUupBuild $Builds); Missing = @(); Uup = $null; Microsoft = $false; Note = $null; Error = $null; Skipped = $null }
     if ($Cfg.Newest -and -not $Cfg.UupBuild) { $p.Skipped = Get-SkippedNewerRelease $Builds $p.Newest }
     $isos = @($Isos | Where-Object { $_.Lang -eq $Cfg.BaseLang -and (Test-UsableIso $_ $Cfg) })
-    if ($Cfg.UseUup -and $Cfg.Download -eq 'Microsoft') { return (Get-MicrosoftPlan $p $isos $Cfg) }
+    if ($msSource -and -not $msSubset) { return (Get-MicrosoftPlan $p $isos $Cfg) }
     # With UUP: an ISO with exactly the ticked editions (only Pro -> a Pro-only ISO, downloaded once and kept next to
     # the multi-edition one). Without UUP (or UUP unreachable) any of your ISOs.
     if ($Cfg.UseUup -and $Builds) {
         $want = Get-DownloadEditions $Cfg.Editions
         $fit = @($isos | Where-Object { -not (Compare-Object @($_.Editions.Name) $want) })
-        if ($isos -and -not $fit) { $p.Note = "None of your ISOs has exactly $($Cfg.Editions -join ', '): downloading one with just these (kept for next builds)" }
+        if ($msSubset -and -not $fit) { $p.Note = "Smaller image but longer download: only $($Cfg.Editions -join ', ') from UUP dump, latest update built in (about 60 minutes instead of 10 from Microsoft, kept for next builds)" }
+        elseif ($isos -and -not $fit) { $p.Note = "None of your ISOs has exactly $($Cfg.Editions -join ', '): downloading one with just these (kept for next builds)" }
         $isos = $fit
     }
     $p.Base = $isos | Sort-Object { [int]$_.Build } -Descending | Select-Object -First 1
@@ -90,7 +102,7 @@ function Get-BuildPlan($Isos, $Builds, $Cfg) {
     $p
 }
 
-# Download source Microsoft: your newest ISO if it has the ticked editions, else the official ISO (all consumer
+# Download source Microsoft, all of its editions ticked: your newest ISO if it has them, else the official ISO (all consumer
 # editions in one). $p.Microsoft = ask Microsoft; the build only downloads when editions are missing or Microsoft's
 # build is newer than yours (its build is only known then), so an older Microsoft ISO never loops.
 function Get-MicrosoftPlan($p, $Isos, $Cfg) {
