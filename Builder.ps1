@@ -78,17 +78,32 @@ $ui.Nav.Add_SelectionChanged({
 
 # --- Background work: network calls and ISO scans run off the UI thread, so the window opens at once ---
 # $Work runs in its own runspace with lib\Source.ps1 loaded, as param($root, $Arg); $Done gets its output (nothing on error)
-# back on the UI thread. $Work goes over as text: a script block from this runspace would run on this (busy) thread.
+# and the problems (errors and warnings as text, shown instead of a plain "nothing found") back on the UI thread.
+# $Work goes over as text: a script block from this runspace would run on this (busy) thread.
 $script:bgJobs = [Collections.ArrayList]@()
+$AvBlockedText = 'Windows Defender blocked the builder (a false alarm, seen right after an update). Close the builder and start it again from its shortcut.'
+# Defender (AMSI) refusing a script: ScriptContainedMaliciousContent somewhere in the exception chain, in any language.
+function Test-AvBlocked($Err) {
+    if ("$($Err.FullyQualifiedErrorId)" -match 'MaliciousContent') { return $true }
+    for ($x = $Err.Exception; $x; $x = $x.InnerException) {
+        if ("$($x.ErrorRecord.FullyQualifiedErrorId) $($x.Errors.ErrorId)" -match 'MaliciousContent') { return $true }
+    }
+    $false
+}
 $bgTimer = New-Object Windows.Threading.DispatcherTimer -Property @{ Interval = [TimeSpan]::FromMilliseconds(200) }
 $bgTimer.Add_Tick({
         foreach ($j in @($script:bgJobs | Where-Object { $_.Handle.IsCompleted })) {
             $script:bgJobs.Remove($j)
             $out = try { @($j.PS.EndInvoke($j.Handle)) } catch { $j.PS.Streams.Error.Add($_); @() }
-            # Failures still count as "nothing" for the UI, but leave a trace instead of vanishing.
-            foreach ($e in @($j.PS.Streams.Error) + @($j.PS.Streams.Warning)) { try { Add-Content "$root\out\background-errors.txt" "$(Get-Date -Format s)  $e  $($e.InvocationInfo.PositionMessage)" } catch { } }
+            $errs = @($j.PS.Streams.Error) + @($j.PS.Streams.Warning)
+            foreach ($e in $errs) { try { Add-Content "$root\out\background-errors.txt" "$(Get-Date -Format s)  $e  $($e.InvocationInfo.PositionMessage)" } catch { } }
+            $problems = @($errs | ForEach-Object { if (Test-AvBlocked $_) { $AvBlockedText } else { ("$_" -split "`n")[0].Trim() } } | Select-Object -Unique)
+            if ($AvBlockedText -in $problems -and -not $script:avWarned) {
+                $script:avWarned = $true   # every background job fails at once: one popup
+                if ($win.IsLoaded) { Show-Msg $AvBlockedText 'Warning' | Out-Null } else { $win.Add_ContentRendered({ Show-Msg $AvBlockedText 'Warning' | Out-Null }) }
+            }
             $j.PS.Runspace.Close(); $j.PS.Dispose()
-            & $j.Done $out
+            & $j.Done $out $problems
         }
         if (-not $script:bgJobs.Count) { $bgTimer.Stop() }
     })
@@ -110,8 +125,9 @@ Start-Background {
     $builds = Get-UupBuilds
     [pscustomobject]@{ Builds = $builds; Langs = $(try { @(Get-UupLanguages (Select-NewestUupBuild $builds).uuid) } catch { @() }) }
 } $null {
-    param($out)
+    param($out, $problems)
     $script:uupLoading = $false
+    $script:uupProblem = $problems | Select-Object -First 1   # why the list is empty (offline, blocked, ...)
     if ($r = $out | Select-Object -First 1) {
         $script:UupBuilds = @($r.Builds)
         if ($r.Langs) { Set-Languages $r.Langs }
@@ -135,7 +151,12 @@ function Start-Update {
     if ($script:scanning) { $script:updateAfterScan = $true; $ui.ScanResult.Text = 'Scanning your ISOs... the builder updates when done.'; return }
     $env:W11UB_DIR = $root   # installer updates this folder instead of asking for a drive
     $env:W11UB_SHA = $script:update.Latest   # exactly the commit that passed CI, not whatever main is by now
-    Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"Start-Sleep 2; irm https://raw.githubusercontent.com/$repo/$($script:update.Latest)/install.ps1 | iex`""
+    # Saved and run with -File, not "irm | iex": Defender flagged that download-and-run pipe and then blocked the
+    # restarted builder's background work (UUP list, ISO scan).
+    $installer = Join-Path $env:TEMP 'w11ub-install.ps1'
+    try { Invoke-WebRequest "https://raw.githubusercontent.com/$repo/$($script:update.Latest)/install.ps1" -OutFile $installer -UseBasicParsing -TimeoutSec 20 }
+    catch { Show-Msg "Could not download the update:`n`n$_" 'Error' | Out-Null; return }
+    Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$installer`""
     $win.Close()
 }
 # Popup once per new version (update-skip.txt remembers a "No"); the Update button stays either way.
@@ -230,7 +251,8 @@ function Update-BuildHint {
     try {
         $p = Get-BuildPlan $script:IsoInfos $script:UupBuilds (Get-Config)
         $b = if ($p.Uup) { $p.Uup } elseif ($p.Base) { Select-UupBuild $script:UupBuilds $p.Base.Build } else { $p.Newest }
-        $ui.BuildHint.Text = if (-not $b) { 'Auto: UUP dump not reachable, only your ISOs are used.' }
+        $ui.BuildHint.Text = if (-not $b -and $script:uupProblem) { "Auto: UUP dump could not be loaded, only your ISOs are used. $($script:uupProblem)" }
+        elseif (-not $b) { 'Auto: UUP dump not reachable, only your ISOs are used.' }
         elseif ($p.Base -and -not $p.Missing) { "Auto = $($b.title)  (not needed now: your ISO has all selected editions)" }
         else { "Auto = $($b.title)" }
     } catch { $ui.BuildHint.Text = 'Auto picks the newest build matching your ISO.' }
@@ -424,13 +446,14 @@ function Invoke-Scan {
     if ($script:scanning) { return }
     $script:scanning = $true; $ui.ScanIsos.IsEnabled = $false; $ui.ScanResult.Text = 'Scanning your ISOs...'
     Start-Background { param($root, $folder) Get-SourceIsos $folder } $ui.IsoFolder.Text {
-        param($out)
+        param($out, $problems)
         $script:scanning = $false; $ui.ScanIsos.IsEnabled = $true
         if ($script:updateAfterScan) { Start-Update; return }
         $script:IsoInfos = @($out | ForEach-Object { $_ })
-        $ui.ScanResult.Text = if ($script:IsoInfos) {
-            ($script:IsoInfos | ForEach-Object { "$($_.Lang)  -  build $($_.Build)  -  $($_.Editions.Count) editions  -  $(Split-Path $_.Path -Leaf)" }) -join "`n"
-        } else { 'No ISOs found in this folder.' }
+        # An ISO that can't be read (or a blocked scan) is listed, never reported as "no ISOs".
+        $lines = @($script:IsoInfos | ForEach-Object { "$($_.Lang)  -  build $($_.Build)  -  $($_.Editions.Count) editions  -  $(Split-Path $_.Path -Leaf)" }) +
+            @($problems | ForEach-Object { if ($_ -eq $AvBlockedText) { $_ } else { "Could not read $_" } })
+        $ui.ScanResult.Text = if ($lines) { $lines -join "`n" } else { 'No ISOs found in this folder.' }
         if ($script:IsoInfos -and $script:IsoInfos[0].Lang -in $script:langs) { $ui.BaseLang.SelectedItem = $script:IsoInfos[0].Lang }
         Update-Editions; Update-Storage
         if ($ui.Nav.SelectedItem.Tag -eq 'PageBuild') { Update-Plan }
@@ -546,6 +569,7 @@ function Update-Plan {
         if ($p.Skipped) { Add-PlanNotice "$($p.Skipped.title) is newer than the version picked automatically, but it's not known whether every PC gets it. To use it, pick it under 'Windows version' on the Source page." $brush.Warn }
         if ($script:scanning) { Add-PlanNotice 'Still scanning your ISOs - the plan updates when done.' $brush.Muted }
         if ($script:uupLoading -and $cfg.UseUup) { Add-PlanNotice 'Still loading the Windows versions from UUP dump - the plan updates when done.' $brush.Muted }
+        if ($script:uupProblem -and -not $script:UupBuilds -and $cfg.UseUup) { Add-PlanNotice "UUP dump could not be loaded: $($script:uupProblem)" $brush.Warn }
 
         # Same cache check as the build. Image time (steps 3-9) is measured on this PC after each build.
         $cachePath = if ($p.Base -and -not $p.Missing) { Get-ImageCachePath $cfg @($cfg.Editions | ForEach-Object { @{ Iso = $p.Base.Path; Name = $_ } }) }

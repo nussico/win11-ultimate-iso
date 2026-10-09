@@ -68,6 +68,10 @@ The user wants things verified before a push (they approve UAC prompts for admin
 - raw.githubusercontent.com caches ~5 min after a push; give a commit-hash URL if the user needs it now.
 - `Start-Background` results: return a `[pscustomobject]`, never a hashtable. One result is unwrapped, and `$out[0]` on a
   hashtable looks up key 0 -> $null.
+- `Start-Background` failures go to `$Done` as `$problems` and into `out\background-errors.txt`. Show them; never turn a
+  failure into "nothing found" (a Defender block once read as "No ISOs found" + "UUP dump not reachable").
+- Defender (AMSI, `VirTool:PowerShell/MaleficAms.W`) blocked the builder restarted by an `irm | iex` update. The Update
+  button saves install.ps1 to %TEMP% and runs it with `-File`; don't go back to a download-and-run pipe there.
 - This PC has `NoDefaultCurrentDirectoryInExePath=1`: cmd won't run scripts from the current folder without `.\`.
 - UUP dump's `uup_download_windows.cmd` restarts itself elevated when not admin, and the original exits at once.
   Test downloads/Cancel only from an admin shell, or the download runs on out of reach.
