@@ -56,8 +56,8 @@ function Get-SourceIsos($Folder) {
 # instead of mixing its editions and setup files into the build. Without UUP it's all there is.
 function Test-UsableIso($Iso, $Cfg) { -not ($Iso.Fast -and $Cfg.UseUup) }
 
-# Microsoft's ISO always holds Home, Pro and Education. Fewer of them ticked (e.g. only Pro) -> UUP dump gets an image
-# with just those. Editions Microsoft doesn't have (Enterprise) stay an error in Get-MicrosoftPlan.
+# Microsoft's ISO always holds Home, Pro and Education. Small ISO on and fewer of them ticked (e.g. only Pro) -> UUP dump
+# gets an image with just those. Editions Microsoft doesn't have (Enterprise) stay an error in Get-MicrosoftPlan.
 function Test-MsSubset($Editions) {
     $want = @(Get-DownloadEditions $Editions)
     -not ($want | Where-Object { $_ -notin $MsIsoEditions }) -and $want.Count -lt $MsIsoEditions.Count
@@ -66,7 +66,7 @@ function Test-MsSubset($Editions) {
 # What a build will use: base ISO, editions to download, UUP build. Shared by the build and the GUI's plan.
 function Get-BuildPlan($Isos, $Builds, $Cfg) {
     $msSource = $Cfg.UseUup -and $Cfg.Download -eq 'Microsoft'
-    $msSubset = $msSource -and $Builds -and (Test-MsSubset $Cfg.Editions)
+    $msSubset = $msSource -and $Cfg.SmallIso -and $Builds -and (Test-MsSubset $Cfg.Editions)
     # The build picker is off for Microsoft: a build picked earlier under UUP dump must not pin this download.
     if ($msSubset) { $Cfg = $Cfg.Clone(); $Cfg.UupBuild = '' }
     $p = @{ Base = $null; Newest = (Select-NewestUupBuild $Builds); Missing = @(); Uup = $null; Microsoft = $false; Note = $null; Error = $null; Skipped = $null }

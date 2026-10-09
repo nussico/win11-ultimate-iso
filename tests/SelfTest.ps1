@@ -193,7 +193,10 @@ Assert ((Get-BuildPlan @($fastIso) $builds $c).Base) 'Plan: Fast-mode ISO used w
 # Download source Microsoft
 $c = @{ BaseLang = 'de-de'; Editions = @('Windows 11 Pro'); UseUup = $true; Download = 'Microsoft'; Newest = $true; UupBuild = ''; IsoFolder = 'src' }
 $pl = Get-BuildPlan @($both) $builds $c
-Assert (-not $pl.Microsoft -and -not $pl.Base -and $pl.Missing -eq 'Windows 11 Pro' -and $pl.Uup.uuid -eq 'f' -and $pl.Note -match 'Smaller image but longer download') 'Microsoft: only Pro ticked, multi-edition ISO -> UUP download of a Pro image, with a note'
+Assert ($pl.Base -eq $both -and -not $pl.Missing -and -not $pl.Uup) 'Microsoft: only Pro ticked, Small ISO off -> multi-edition ISO is reused'
+$c.SmallIso = $true
+$pl = Get-BuildPlan @($both) $builds $c
+Assert (-not $pl.Microsoft -and -not $pl.Base -and $pl.Missing -eq 'Windows 11 Pro' -and $pl.Uup.uuid -eq 'f' -and $pl.Note -match 'Smaller image but longer download') 'Microsoft: Small ISO, only Pro ticked, multi-edition ISO -> UUP download of a Pro image, with a note'
 Assert ((Get-BuildPlan @($both) @() $c).Base -eq $both) 'Microsoft: only Pro ticked, UUP dump unreachable -> multi-edition ISO is used'
 $c.UupBuild = 'a'
 Assert ((Get-BuildPlan @($both) $builds $c).Uup.uuid -eq 'f' -and $c.UupBuild -eq 'a') 'Microsoft: only Pro ticked, a build picked earlier under UUP dump is ignored'
@@ -262,10 +265,10 @@ $q = Get-UupRequest @('Windows 11 Home', 'Windows 11 Enterprise')
 Assert ($q.Body -match 'updates=1' -and $q.Edition -eq 'CORE;PROFESSIONAL' -and $q.Body -match 'autodl=3' -and $q.Body -match 'cleanup=1' -and $q.Body -match 'virtualEditions\[\]=Enterprise') 'Virtual edition adds Pro base'
 
 # Preset file: choices only, never secrets or paths
-$pd = Get-PresetData @{ BaseLang = 'de-de'; Editions = @('Windows 11 Pro'); Patches = @('hwchecks'); IsoFolder = 'D:\isos'; Output = 'D:\out\x.iso'
+$pd = Get-PresetData @{ BaseLang = 'de-de'; Editions = @('Windows 11 Pro'); Patches = @('hwchecks'); IsoFolder = 'D:\isos'; Output = 'D:\out\x.iso'; SmallIso = $true
     Unattend = @{ Enabled = $true; UserName = 'Max'; Password = 'secret1'; ProductKey = 'AAAAA-BBBBB-CCCCC-DDDDD-EEEEE'; CustomScript = 'D:\my.ps1'; Apps = @('Valve.Steam'); WifiName = 'HomeNet'; WifiPassword = 'wifisecret' } }
 $pj = $pd | ConvertTo-Json -Depth 4
-Assert ($pj -match 'Max' -and $pj -match 'Valve.Steam' -and $pj -match 'hwchecks' -and $pj -match 'HomeNet' -and $pj -notmatch 'secret1|AAAAA|wifisecret|D:\\\\') 'Preset file: choices kept, no secrets or paths'
+Assert ($pj -match '"SmallIso":\s+true' -and $pj -match 'Max' -and $pj -match 'Valve.Steam' -and $pj -match 'hwchecks' -and $pj -match 'HomeNet' -and $pj -notmatch 'secret1|AAAAA|wifisecret|D:\\\\') 'Preset file: choices kept, no secrets or paths'
 
 # ISO version stamp (Build.ps1 loaded in a child scope so its Write-Log stays out of the way)
 & {

@@ -31,8 +31,8 @@ function Write-BuildHeader($Cfg) {
     Write-Log "Patches:        $(if ($Cfg.Patches) { ($Cfg.Patches | ForEach-Object { $Patches[$_].Label }) -join '; ' } else { 'none' })$(if ($Cfg.PatchMode -eq 'Setup') { '  (applied during Windows Setup)' })"
     Write-Log "Source:         ISO folder $($Cfg.IsoFolder); download $(if (-not $Cfg.UseUup) { 'off' } elseif ($Cfg.Download -eq 'Microsoft') { 'Microsoft ISO' } else { 'UUP dump' }); always newest $(if ($Cfg.Newest) { 'on' } else { 'off' })"
     Write-Log "Unattended:     $(if ($u.Enabled) { "user '$($u.UserName)', auto-install $($u.AutoInstall), edition '$($u.Edition)', $(if ($u.ProductKey) { 'own product key' } else { 'generic key' }), skip OOBE $($u.SkipOobe)" } else { 'off' })"
-    Write-Log "Output:         $($Cfg.Output)$(if ($Cfg.Split) { ' (install.wim split for FAT32)' })"
-    Write-Log "Speed:          Defender exclusion $(if ($Cfg.DefenderExclude) { 'on' } else { 'off' }); compression $(if ($Cfg.QuickCompress) { 'quick' } else { 'max' })"
+    Write-Log "Output:         $($Cfg.Output)$(if ($Cfg.Split -and -not $Cfg.SmallIso) { ' (install.wim split for FAT32)' })"
+    Write-Log "Speed:          Defender exclusion $(if ($Cfg.DefenderExclude) { 'on' } else { 'off' }); compression $(if ($Cfg.QuickCompress) { 'quick' } else { 'max' })$(if ($Cfg.SmallIso) { ', small ISO (install.esd)' })"
 }
 
 function Write-BuildSummary($Cfg) {
@@ -361,7 +361,18 @@ function Invoke-Build($Cfg, $Sync) {
             Write-Log " $($script:Report.Images[-1])"
         }
         Write-Log "install.wim: $([math]::Round((Get-Item "$w\iso\sources\install.wim").Length/1GB,2)) GB"
-        if ($Cfg.Split) {
+        if ($Cfg.SmallIso) {
+            # Recovery (LZMS) compression: the smallest ISO, as Microsoft's own ESDs. The cache keeps the .wim.
+            foreach ($img in Get-WindowsImage -ImagePath "$w\iso\sources\install.wim") {
+                if ($Sync.Cancel) { throw 'Cancelled by user' }
+                Write-Log "Small ISO: compressing $($img.ImageName) into install.esd - takes 10-20 minutes, no output meanwhile"
+                Export-WindowsImage -SourceImagePath "$w\iso\sources\install.wim" -SourceIndex $img.ImageIndex -DestinationImagePath "$w\iso\sources\install.esd" -CompressionType recovery | Out-Null
+            }
+            Remove-Item "$w\iso\sources\install.wim"
+            Write-Log "install.esd: $([math]::Round((Get-Item "$w\iso\sources\install.esd").Length/1GB,2)) GB"
+            if ((Get-Item "$w\iso\sources\install.esd").Length -gt 4GB) { Write-Log 'NOTE: install.esd > 4 GB - use Rufus (NTFS) for a USB stick' }
+        }
+        elseif ($Cfg.Split) {
             Split-WindowsImage -ImagePath "$w\iso\sources\install.wim" -SplitImagePath "$w\iso\sources\install.swm" -FileSize 3800 | Out-Null
             Remove-Item "$w\iso\sources\install.wim"
         } elseif ((Get-Item "$w\iso\sources\install.wim").Length -gt 4GB) {

@@ -271,11 +271,12 @@ function Update-Editions {
 # Spells out which build "Auto" resolves to (same logic as the build plan).
 function Update-BuildHint {
     $ms = $ui.Download.SelectedItem.Tag -eq 'Microsoft'
-    if ($ms -and -not (Test-MsSubset (Get-Config).Editions)) { $ui.BuildHint.Text = 'Microsoft: the newest release as on microsoft.com. Pick UUP dump to choose a build.'; return }
+    $cfg = Get-Config
+    if ($ms -and -not ($cfg.SmallIso -and (Test-MsSubset $cfg.Editions))) { $ui.BuildHint.Text = 'Microsoft: the newest release as on microsoft.com. Pick UUP dump to choose a build.'; return }
     if (-not $ms -and $ui.Build.SelectedIndex -gt 0) { $ui.BuildHint.Text = 'Downloads exactly this build when editions are missing.'; return }
     if ($script:uupLoading) { $ui.BuildHint.Text = 'Loading the build list from UUP dump...'; return }
     try {
-        $p = Get-BuildPlan $script:IsoInfos $script:UupBuilds (Get-Config)
+        $p = Get-BuildPlan $script:IsoInfos $script:UupBuilds $cfg
         $b = if ($p.Uup) { $p.Uup } elseif ($p.Base) { Select-UupBuild $script:UupBuilds $p.Base.Build } else { $p.Newest }
         $ui.BuildHint.Text = if (-not $b -and $script:uupProblem) { "Auto: UUP dump could not be loaded, only your ISOs are used. $($script:uupProblem)" }
         elseif (-not $b) { 'Auto: UUP dump not reachable, only your ISOs are used.' }
@@ -429,7 +430,7 @@ function Import-PresetFile($p, $Name) {
         elseif ($c -is [Windows.Controls.ComboBox]) { if ("$v" -in @($c.Items)) { $c.SelectedItem = "$v" } }
         else { $c.Text = "$v" } }
     $script:applying = $true
-    foreach ($k in 'UseUup', 'Newest', 'Split', 'QuickCompress', 'DefenderExclude', 'BaseLang') { & $set $k $p.$k }
+    foreach ($k in 'UseUup', 'Newest', 'Split', 'QuickCompress', 'SmallIso', 'DefenderExclude', 'BaseLang') { & $set $k $p.$k }
     $dl = @($ui.Download.Items | Where-Object Tag -eq $p.Download); if ($dl) { $ui.Download.SelectedItem = $dl[0] }   # older presets: keep the current source
     Update-Editions
     if ($p.PSObject.Properties['Editions']) { foreach ($e in $script:edChecks.Keys) { $script:edChecks[$e].IsChecked = $e -in @($p.Editions) } }
@@ -498,6 +499,7 @@ $ui.UseUup.Add_Click({ Update-Editions })
 $ui.Download.Add_SelectionChanged({ Update-Editions })
 $ui.Build.Add_SelectionChanged({ Update-BuildHint })
 $ui.Newest.Add_Click({ Update-BuildHint })
+$ui.SmallIso.Add_Click({ Update-BuildHint; Update-Plan })   # can change the download and the build time
 
 # --- Config + validation ---
 function Get-Config {
@@ -516,7 +518,7 @@ function Get-Config {
             RunWinUtil = [bool]$ui.RunWinUtil.IsChecked; CustomScript = $ui.CustomScript.Text; EnableAdmin = [bool]$ui.EnableAdmin.IsChecked
             Apps = @($ui.AppPanel.Children | ForEach-Object Tag); WifiName = $ui.WifiName.Text.Trim(); WifiPassword = $ui.WifiPassword.Password
         }
-        Output = $ui.Output.Text; Split = [bool]$ui.Split.IsChecked; QuickCompress = [bool]$ui.QuickCompress.IsChecked; DefenderExclude = [bool]$ui.DefenderExclude.IsChecked; WorkDir = "$root\work"; CacheDir = "$root\cache"; ToolVersion = $toolVersion
+        Output = $ui.Output.Text; Split = [bool]$ui.Split.IsChecked; QuickCompress = [bool]$ui.QuickCompress.IsChecked; SmallIso = [bool]$ui.SmallIso.IsChecked; DefenderExclude = [bool]$ui.DefenderExclude.IsChecked; WorkDir = "$root\work"; CacheDir = "$root\cache"; ToolVersion = $toolVersion
     }
 }
 
@@ -611,11 +613,15 @@ function Update-Plan {
         $t = Get-Timing
         $img = $t.($script:planKey) * $(if ($cached) { 1 } else { $script:planEds })   # steps 3-9
         $dl = if ($p.Microsoft) { 20 } elseif ($p.Missing) { 60 } else { 0 }          # step 2
-        $min = 1 + [math]::Ceiling($img) + $dl
+        # ponytail: Small ISO (install.esd) guessed at 15 min per edition, not measured; give it its own timing key if it's off.
+        $esd = if ($cfg.SmallIso) { 15 * $script:planEds } else { 0 }                 # step 7
+        $script:planSmall = [bool]$cfg.SmallIso
+        $min = 1 + [math]::Ceiling($img) + $dl + $esd
         # Minutes per step for the progress bar and the time left. Shares of steps 3-9 come from real builds:
         # patching is the longest step, compression only matters at max compression, a cached image mostly writes the ISO.
         $share = switch ($script:planKey) { Cached { 0.05, 0.05, 0.05, 0.05, 0.05, 0.6, 0.15 } Setup { 0.6, 0.01, 0.01, 0.03, 0.01, 0.3, 0.04 } Quick { 0.27, 0.5, 0.06, 0.01, 0.04, 0.1, 0.02 } default { 0.2, 0.37, 0.05, 0.01, 0.27, 0.08, 0.02 } }
         $script:planSteps = @(0.2, ($dl + 0.8)) + @($share | ForEach-Object { $_ * $img })
+        $script:planSteps[6] += $esd
         $need = Get-NeededGB $cached; $free = [math]::Round((Get-PSDrive $root.Substring(0, 1)).Free / 1GB)
 
         $how = $(if ($cached) { 'reuses your last build' } elseif ($t.Measured -contains $script:planKey) { 'measured on this PC' } else { 'estimate' })
@@ -882,7 +888,7 @@ $timer.Add_Tick({
                 Set-BuildStatus 'failed' 'Build failed' "$($script:sync.Error)  -  details in build-log.txt next to the ISO."
                 Show-Msg "Build failed:`n$($script:sync.Error)`n`nDetails: build-log.txt next to the ISO." 'Error' | Out-Null
             } else {
-                if ($script:imageStart -and $script:run.Key) { Save-Timing $script:run.Key (((Get-Date) - $script:imageStart).TotalMinutes / $(if ($script:run.Key -eq 'Cached') { 1 } else { $script:run.Eds })) }
+                if ($script:imageStart -and $script:run.Key -and -not $script:run.Small) { Save-Timing $script:run.Key (((Get-Date) - $script:imageStart).TotalMinutes / $(if ($script:run.Key -eq 'Cached') { 1 } else { $script:run.Eds })) }
                 Set-StepState 9 'done' ($now - $script:stepStarts[9]); $ui.Progress.Value = 9
                 $size = try { " ($([math]::Round((Get-Item $script:buildOutput).Length / 1GB, 1)) GB)" } catch { '' }
                 Set-BuildStatus 'done' 'ISO ready' "$script:buildOutput$size"
@@ -926,7 +932,7 @@ $ui.BuildBtn.Add_Click({
         Set-BuildStatus 'running' 'Starting...' 'Preparing the build'
         # Snapshot the plan: switching to this page re-plans, and once step 7 writes the cache the plan would say "Cached".
         $script:imageStart = $null; $script:planKey = $null; $script:planSteps = @(1) * 9; Update-Plan
-        $script:run = @{ Key = $script:planKey; Eds = $script:planEds; Steps = $script:planSteps }
+        $script:run = @{ Key = $script:planKey; Eds = $script:planEds; Steps = $script:planSteps; Small = $script:planSmall }   # Small: esd time would skew the timing
         $script:sync = [hashtable]::Synchronized(@{ Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]'; Step = 0; Cancel = $false; Done = $false; Error = $null })
         $ps = [powershell]::Create()
         $ps.AddScript({

@@ -30,9 +30,10 @@ Moved the folder? Right-click `Builder.ps1` > *Run with PowerShell* once to fix 
   but you can pick them under *Windows version*.
   *Download from*: **Microsoft** (default) gets the official ISO (an 8 GB download, about 10 minutes at 100 Mbit/s), and Windows Update installs the latest
   update after setup. **UUP dump** merges the latest update in (about 60 minutes) and also offers Enterprise.
-  Microsoft's ISO always holds Home, Pro and Education: with fewer editions ticked (e.g. only Pro), the builder gets an
-  image with just those from UUP dump instead.
   Either way the download is kept in `sources` and reused until a new Windows version comes out.
+- **Small ISO (slower)** (Build page): saves the image as `install.esd` (strongest compression, about 10-20 extra minutes
+  per edition). With Microsoft as the source and fewer editions ticked than its ISO has (Home, Pro, Education), it also
+  downloads an image with just those from UUP dump (about 60 minutes instead of 10).
 - **Editions and language**: Home, Pro, Education, Enterprise. One language per ISO. With UUP dump on, the build uses an ISO with exactly
   the ticked editions: tick only Pro and it downloads a Pro-only ISO once (kept in `sources` next to the others).
 - **Patches**: no TPM/Secure Boot/CPU checks, local account, debloat, privacy, taskbar, Explorer, gaming and update tweaks.
