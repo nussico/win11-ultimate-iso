@@ -73,6 +73,8 @@ The user wants things verified before a push (they approve UAC prompts for admin
 - 2026-10-09 08:54-09:11 Defender blocked the builder via AMSI (`VirTool:PowerShell/MaleficAms.W`): a cloud-delivered
   false positive, gone after its next cloud fetch. Not our code (files scan clean, elevated replays clean). Check the
   Defender log (1116 vs 2010 cloud fetches) before changing code for a detection.
+- The Update button saves install.ps1 to %TEMP% and runs it with `-File`. Don't go back to `irm | iex` there: a
+  download-and-run pipe is what antivirus watches for.
 - `$x = try { ... } catch { @() }` gives `$x = $null`, not an empty array; wrap the whole try in `@()` instead.
 - This PC has `NoDefaultCurrentDirectoryInExePath=1`: cmd won't run scripts from the current folder without `.\`.
 - UUP dump's `uup_download_windows.cmd` restarts itself elevated when not admin, and the original exits at once.

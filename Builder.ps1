@@ -124,7 +124,7 @@ $ui.Build.Items.Add('Auto - newest build matching your ISO') | Out-Null
 $ui.Build.SelectedIndex = 0
 Start-Background {
     $builds = Get-UupBuilds
-    [pscustomobject]@{ Builds = $builds; Langs = $(try { @(Get-UupLanguages (Select-NewestUupBuild $builds).uuid) } catch { @() }) }
+    [pscustomobject]@{ Builds = $builds; Langs = @(try { Get-UupLanguages (Select-NewestUupBuild $builds).uuid } catch { }) }
 } $null {
     param($out, $problems)
     $script:uupLoading = $false
@@ -176,11 +176,11 @@ Start-Background {
     $runs = (Invoke-RestMethod "https://api.github.com/repos/$repo/commits/$latest/check-runs?check_name=selftest" -TimeoutSec 5).check_runs
     if (-not @($runs | Where-Object conclusion -eq 'success')) { return }
     # Commit titles since the installed version, newest first (unknown base e.g. after a force push: no list)
-    $news = try { $c = Invoke-RestMethod "https://api.github.com/repos/$repo/compare/$have...$latest" -TimeoutSec 5; [array]::Reverse($c.commits); @($c.commits | ForEach-Object { ($_.commit.message -split "`n")[0] }) } catch { @() }
+    $news = @(try { $c = Invoke-RestMethod "https://api.github.com/repos/$repo/compare/$have...$latest" -TimeoutSec 5; [array]::Reverse($c.commits); $c.commits | ForEach-Object { ($_.commit.message -split "`n")[0] } } catch { })
     [pscustomobject]@{ Latest = $latest; News = $news }   # not a hashtable: $out[0] on one would look up key 0
 } $repo {
     param($out)   # empty for a manual install, offline, rate-limited or up to date: no button, no popup
-    if (-not ($out -and $out[0])) { return }
+    if (-not ($out -and $out[0].Latest)) { return }   # no version, no button: Update would fetch an empty commit
     $ui.UpdateBtn.Visibility = 'Visible'; $ui.SubTitle.Visibility = 'Collapsed'
     $script:update = $out[0]
     if ($win.IsLoaded) { Show-UpdatePopup $script:update.Latest $script:update.News }
@@ -449,7 +449,9 @@ function Invoke-Scan {
         param($out, $problems)
         $script:scanning = $false; $ui.ScanIsos.IsEnabled = $true
         if ($script:updateAfterScan) { Start-Update; return }
-        $script:IsoInfos = @($out | Where-Object { $_.Path })   # anything else from a half-blocked scan would crash the window
+        # Results without a path (a half-blocked scan) would crash the window: skipped, but listed as a problem.
+        $script:IsoInfos = @($out | Where-Object { $_.Path })
+        if ($script:IsoInfos.Count -lt @($out).Count) { $problems = @($problems) + 'all results (unexpected scan output) - scan again or restart the builder' }
         # An ISO that can't be read (or a blocked scan) is listed, never reported as "no ISOs".
         $lines = @($script:IsoInfos | ForEach-Object { "$($_.Lang)  -  build $($_.Build)  -  $($_.Editions.Count) editions  -  $(Split-Path $_.Path -Leaf)" }) +
             @($problems | ForEach-Object { if ($_ -eq $AvBlockedText) { $_ } else { "Could not read $_" } })
