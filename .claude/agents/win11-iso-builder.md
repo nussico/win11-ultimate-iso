@@ -70,8 +70,10 @@ The user wants things verified before a push (they approve UAC prompts for admin
   hashtable looks up key 0 -> $null.
 - `Start-Background` failures go to `$Done` as `$problems` and into `out\background-errors.txt`. Show them; never turn a
   failure into "nothing found" (a Defender block once read as "No ISOs found" + "UUP dump not reachable").
-- Defender (AMSI, `VirTool:PowerShell/MaleficAms.W`) blocked the builder restarted by an `irm | iex` update. The Update
-  button saves install.ps1 to %TEMP% and runs it with `-File`; don't go back to a download-and-run pipe there.
+- 2026-10-09 08:54-09:11 Defender blocked the builder via AMSI (`VirTool:PowerShell/MaleficAms.W`): a cloud-delivered
+  false positive, gone after its next cloud fetch. Not our code (files scan clean, elevated replays clean). Check the
+  Defender log (1116 vs 2010 cloud fetches) before changing code for a detection.
+- `$x = try { ... } catch { @() }` gives `$x = $null`, not an empty array; wrap the whole try in `@()` instead.
 - This PC has `NoDefaultCurrentDirectoryInExePath=1`: cmd won't run scripts from the current folder without `.\`.
 - UUP dump's `uup_download_windows.cmd` restarts itself elevated when not admin, and the original exits at once.
   Test downloads/Cancel only from an admin shell, or the download runs on out of reach.

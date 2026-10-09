@@ -81,7 +81,7 @@ $ui.Nav.Add_SelectionChanged({
 # and the problems (errors and warnings as text, shown instead of a plain "nothing found") back on the UI thread.
 # $Work goes over as text: a script block from this runspace would run on this (busy) thread.
 $script:bgJobs = [Collections.ArrayList]@()
-$AvBlockedText = 'Windows Defender blocked the builder (a false alarm, seen right after an update). Close the builder and start it again from its shortcut.'
+$AvBlockedText = 'Windows Defender blocked the builder (a false alarm from its cloud protection, gone again within minutes last time). Close the builder and start it again a bit later.'
 # Defender (AMSI) refusing a script: ScriptContainedMaliciousContent somewhere in the exception chain, in any language.
 function Test-AvBlocked($Err) {
     if ("$($Err.FullyQualifiedErrorId)" -match 'MaliciousContent') { return $true }
@@ -94,7 +94,8 @@ $bgTimer = New-Object Windows.Threading.DispatcherTimer -Property @{ Interval = 
 $bgTimer.Add_Tick({
         foreach ($j in @($script:bgJobs | Where-Object { $_.Handle.IsCompleted })) {
             $script:bgJobs.Remove($j)
-            $out = try { @($j.PS.EndInvoke($j.Handle)) } catch { $j.PS.Streams.Error.Add($_); @() }
+            # @(...) outside the try: "$x = try {} catch { @() }" gives $null, and $null piped to ForEach-Object runs once.
+            $out = @(try { $j.PS.EndInvoke($j.Handle) } catch { $j.PS.Streams.Error.Add($_) })
             $errs = @($j.PS.Streams.Error) + @($j.PS.Streams.Warning)
             foreach ($e in $errs) { try { Add-Content "$root\out\background-errors.txt" "$(Get-Date -Format s)  $e  $($e.InvocationInfo.PositionMessage)" } catch { } }
             $problems = @($errs | ForEach-Object { if (Test-AvBlocked $_) { $AvBlockedText } else { ("$_" -split "`n")[0].Trim() } } | Select-Object -Unique)
@@ -151,8 +152,7 @@ function Start-Update {
     if ($script:scanning) { $script:updateAfterScan = $true; $ui.ScanResult.Text = 'Scanning your ISOs... the builder updates when done.'; return }
     $env:W11UB_DIR = $root   # installer updates this folder instead of asking for a drive
     $env:W11UB_SHA = $script:update.Latest   # exactly the commit that passed CI, not whatever main is by now
-    # Saved and run with -File, not "irm | iex": Defender flagged that download-and-run pipe and then blocked the
-    # restarted builder's background work (UUP list, ISO scan).
+    # Saved and run with -File, not "irm | iex": a download-and-run pipe is what antivirus watches for.
     $installer = Join-Path $env:TEMP 'w11ub-install.ps1'
     try { Invoke-WebRequest "https://raw.githubusercontent.com/$repo/$($script:update.Latest)/install.ps1" -OutFile $installer -UseBasicParsing -TimeoutSec 20 }
     catch { Show-Msg "Could not download the update:`n`n$_" 'Error' | Out-Null; return }
@@ -449,7 +449,7 @@ function Invoke-Scan {
         param($out, $problems)
         $script:scanning = $false; $ui.ScanIsos.IsEnabled = $true
         if ($script:updateAfterScan) { Start-Update; return }
-        $script:IsoInfos = @($out | ForEach-Object { $_ })
+        $script:IsoInfos = @($out | Where-Object { $_.Path })   # anything else from a half-blocked scan would crash the window
         # An ISO that can't be read (or a blocked scan) is listed, never reported as "no ISOs".
         $lines = @($script:IsoInfos | ForEach-Object { "$($_.Lang)  -  build $($_.Build)  -  $($_.Editions.Count) editions  -  $(Split-Path $_.Path -Leaf)" }) +
             @($problems | ForEach-Object { if ($_ -eq $AvBlockedText) { $_ } else { "Could not read $_" } })
