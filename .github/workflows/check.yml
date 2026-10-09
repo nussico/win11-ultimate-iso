@@ -1,4 +1,4 @@
-# The builder's update check looks for this job's result ("selftest") and only offers commits that passed.
+# The builder's update check reads only the selftest job's result and only offers commits that passed.
 name: Check
 on: [push, pull_request]
 jobs:
@@ -10,18 +10,3 @@ jobs:
       - name: Parse, ASCII, XAML and self-tests
         shell: powershell
         run: .\tests\Check.ps1
-  actionlint:
-    name: actionlint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Catches YAML, expression and input errors in the workflows. Pinned by checksum; bump both lines together.
-      - name: Lint workflows
-        env:
-          VERSION: 1.7.12
-          SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
-        run: |
-          curl -fsSLo actionlint.tgz "https://github.com/rhysd/actionlint/releases/download/v${VERSION}/actionlint_${VERSION}_linux_amd64.tar.gz"
-          echo "${SHA256}  actionlint.tgz" | sha256sum -c -
-          tar -xzf actionlint.tgz actionlint
-          ./actionlint -color

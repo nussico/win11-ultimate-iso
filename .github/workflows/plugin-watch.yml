@@ -1,5 +1,5 @@
 # Weekly check of the code-review plugin pinned in claude-code-review.yml (Dependabot does not bump that ref).
-# Opens an issue when the plugin changed upstream since the pinned commit.
+# Opens an issue when the plugin changed upstream since the pinned commit, or when actionlint (lint.yml) has a newer release.
 name: Plugin watch
 on:
   schedule:
@@ -32,4 +32,21 @@ jobs:
               "`n`nReview https://github.com/anthropics/claude-code/compare/$pinned...$head, then set ``ref:`` in .github/workflows/claude-code-review.yml to ``$head``.`n`nRun: $env:RUN"
           $open = gh issue list --state open --search "in:title `"$title`"" --json number --jq '.[0].number'
           if ($open) { gh issue comment $open --body "Still behind, main is now ``$head``: $env:RUN" }
+          else { gh issue create --title $title --body $body }
+      - name: Compare pinned actionlint with latest release
+        if: success() || failure()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          $wf = Get-Content .github/workflows/lint.yml -Raw
+          if ($wf -notmatch '(?m)VERSION: (\S+)') { throw 'actionlint VERSION not found in lint.yml' }
+          $pinned = $Matches[1]
+          $latest = (gh api repos/rhysd/actionlint/releases/latest --jq .tag_name).TrimStart('v')
+          if ([version]$latest -le [version]$pinned) { Write-Host "actionlint $pinned is current"; exit 0 }
+          $title = 'actionlint has a newer release: bump lint.yml'
+          $body = "lint.yml pins actionlint **$pinned**, latest is **$latest** (https://github.com/rhysd/actionlint/releases/tag/v$latest).`n`nSet ``VERSION`` and ``SHA256`` in .github/workflows/lint.yml (the linux_amd64 line in actionlint_$($latest)_checksums.txt).`n`nRun: $env:RUN"
+          $open = gh issue list --state open --search "in:title `"$title`"" --json number --jq '.[0].number'
+          if ($open) { gh issue comment $open --body "Still behind, latest is $($latest): $env:RUN" }
           else { gh issue create --title $title --body $body }
