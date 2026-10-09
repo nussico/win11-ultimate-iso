@@ -80,3 +80,5 @@ Manual install: download the ZIP, extract, right-click `Builder.ps1` > *Run with
 
 Not affiliated with Microsoft, Chris Titus Tech or UUP dump. Aggressive patches and automatic install can break things
 or erase disks. Use at your own risk. [MIT license](LICENSE).
+
+<!-- review workflow test, do not merge -->
