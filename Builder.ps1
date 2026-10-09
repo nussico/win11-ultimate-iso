@@ -152,11 +152,17 @@ function Start-Update {
     if ($script:scanning) { $script:updateAfterScan = $true; $ui.ScanResult.Text = 'Scanning your ISOs... the builder updates when done.'; return }
     $env:W11UB_DIR = $root   # installer updates this folder instead of asking for a drive
     $env:W11UB_SHA = $script:update.Latest   # exactly the commit that passed CI, not whatever main is by now
-    # Saved and run with -File, not "irm | iex": a download-and-run pipe is what antivirus watches for.
-    $installer = Join-Path $env:TEMP 'w11ub-install.ps1'
+    # Saved and run from a file, not "irm | iex": a download-and-run pipe is what antivirus watches for.
+    # Random name: it runs elevated, so nothing else may guess the path and swap the file before it runs.
+    $installer = Join-Path $env:TEMP "w11ub-install-$([guid]::NewGuid().ToString('N')).ps1"
     try { Invoke-WebRequest "https://raw.githubusercontent.com/$repo/$($script:update.Latest)/install.ps1" -OutFile $installer -UseBasicParsing -TimeoutSec 20 }
     catch { Show-Msg "Could not download the update:`n`n$_" 'Error' | Out-Null; return }
-    Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$installer`""
+    # Waits until this window is closed (a second builder would only bring this one to the front), keeps a failure on
+    # screen instead of vanishing with the builder already gone, and deletes the installer afterwards.
+    $f = $installer -replace "'", "''"
+    $run = "Start-Sleep 2; try { & '$f' } catch { Write-Host `$_ -ForegroundColor Red; Read-Host 'Update failed. Press Enter to close' } finally { Remove-Item '$f' -ErrorAction SilentlyContinue }"
+    Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$run`""
+    $script:updating = $true
     $win.Close()
 }
 # Popup once per new version (update-skip.txt remembers a "No"); the Update button stays either way.
@@ -448,13 +454,17 @@ function Invoke-Scan {
     Start-Background { param($root, $folder) Get-SourceIsos $folder } $ui.IsoFolder.Text {
         param($out, $problems)
         $script:scanning = $false; $ui.ScanIsos.IsEnabled = $true
-        if ($script:updateAfterScan) { Start-Update; return }
-        # Results without a path (a half-blocked scan) would crash the window: skipped, but listed as a problem.
+        if ($script:updateAfterScan) {
+            $script:updateAfterScan = $false; Start-Update
+            if ($script:updating) { return }   # update failed to start: show this scan as usual
+        }
+        # Results without a path (a half-blocked scan) would crash the window: skipped, but said so.
         $script:IsoInfos = @($out | Where-Object { $_.Path })
-        if ($script:IsoInfos.Count -lt @($out).Count) { $problems = @($problems) + 'all results (unexpected scan output) - scan again or restart the builder' }
+        $skipped = @($out).Count - $script:IsoInfos.Count
         # An ISO that can't be read (or a blocked scan) is listed, never reported as "no ISOs".
         $lines = @($script:IsoInfos | ForEach-Object { "$($_.Lang)  -  build $($_.Build)  -  $($_.Editions.Count) editions  -  $(Split-Path $_.Path -Leaf)" }) +
-            @($problems | ForEach-Object { if ($_ -eq $AvBlockedText) { $_ } else { "Could not read $_" } })
+            @($problems | ForEach-Object { if ($_ -eq $AvBlockedText) { $_ } else { "Could not read $_" } }) +
+            @(if ($skipped) { "Skipped $skipped unexpected scan result(s) - scan again if an ISO is missing" })
         $ui.ScanResult.Text = if ($lines) { $lines -join "`n" } else { 'No ISOs found in this folder.' }
         if ($script:IsoInfos -and $script:IsoInfos[0].Lang -in $script:langs) { $ui.BaseLang.SelectedItem = $script:IsoInfos[0].Lang }
         Update-Editions; Update-Storage
