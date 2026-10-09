@@ -6,6 +6,8 @@ $ErrorActionPreference = 'Stop'
 function Write-Log($m) { }
 $cfg = Get-Content (Join-Path (Split-Path $Iso) 'config.json') -Raw | ConvertFrom-Json
 $script:fails = 0
+# reg.exe reports a missing value on stderr (PS 5.1 throws on that under 'Stop', even with 2>$null) plus blank stdout lines
+function Get-Reg { $ErrorActionPreference = 'Continue'; reg query @args 2>$null | Where-Object { $_ } }
 function Check($Cond, $Msg) { if ($Cond) { Write-Host "ok   $Msg" } else { Write-Host "FAIL $Msg" -ForegroundColor Red; $script:fails++ } }
 
 $mount = "$env:TEMP\w11test"
@@ -41,8 +43,8 @@ try {
             foreach ($id in $cfg.Patches) {
                 foreach ($e in $Patches[$id].Reg) {
                     $path, $name, $value = $e -split '\|'
-                    if ($name -eq '@') { $out = reg query (Convert-RegPath $path) /ve 2>$null; Check ($LASTEXITCODE -eq 0) "$id : $path default value"; continue }
-                    $out = reg query (Convert-RegPath $path) /v $name 2>$null
+                    if ($name -eq '@') { $out = Get-Reg (Convert-RegPath $path) /ve; Check ($LASTEXITCODE -eq 0) "$id : $path default value"; continue }
+                    $out = Get-Reg (Convert-RegPath $path) /v $name
                     if ($value -eq '-') { Check (-not $out) "$id : $name deleted" }
                     elseif ($value -like 'sz:*') { Check ($out -match "REG_SZ\s+$([regex]::Escape($value.Substring(3)))\s*$") "$id : $name = $value" }
                     else { Check ($out -match "0x$('{0:x}' -f [long]$value)\b") "$id : $name = $value" }
