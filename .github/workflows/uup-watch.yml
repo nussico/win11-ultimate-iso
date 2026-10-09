@@ -1,0 +1,37 @@
+# Weekly live check of UUP dump (tests\Check-Uup.ps1). Opens an issue when the API or download package changed,
+# or when a newer Windows release appears that Test-GeneralRelease skips.
+name: UUP watch
+on:
+  schedule:
+    - cron: '17 6 * * 1'   # Mondays 06:17 UTC
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  uup:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check UUP dump
+        id: uup
+        shell: powershell
+        run: .\tests\Check-Uup.ps1
+      - name: Open issue
+        if: failure() || steps.uup.outputs.skipped
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SKIPPED: ${{ steps.uup.outputs.skipped }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if ($env:SKIPPED -and '${{ steps.uup.outcome }}' -eq 'success') {
+              $title = "New Windows release to classify: $env:SKIPPED"
+              $body = "UUP dump lists **$env:SKIPPED**, newer than the release the builder picks. Check learn.microsoft.com/windows/release-health and add it to ``NewPcOnlyReleases`` or change ``Test-GeneralRelease`` (lib/Source.ps1).`n`nRun: $env:RUN"
+          } else {
+              $title = 'UUP watch failed: UUP dump API or package changed'
+              $body = "tests/Check-Uup.ps1 failed. Builds from UUP dump may be broken for users.`n`nRun: $env:RUN"
+          }
+          $open = gh issue list --state open --search "in:title `"$title`"" --json number --jq '.[0].number'
+          if ($open) { gh issue comment $open --body "Still happening: $env:RUN" }
+          else { gh issue create --title $title --body $body }

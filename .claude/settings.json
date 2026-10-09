@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if grep -qE 'git( -C [^ ]+)? commit'; then powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-before-commit.ps1\"; fi",
+            "timeout": 180,
+            "statusMessage": "Running repo checks before commit..."
+          }
+        ]
+      }
+    ]
+  }
+}
