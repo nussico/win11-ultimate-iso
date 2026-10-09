@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if grep -qE 'git( -C [^ ]+)? commit'; then powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-before-commit.ps1\"; fi",
+            "command": "if grep -qE 'git( -C [^ ]+)? commit'; then if command -v powershell.exe >/dev/null; then powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-before-commit.ps1\"; else echo 'Repo checks are Windows-only (no powershell.exe here); the Check workflow runs them on push' >&2; fi; fi",
             "timeout": 180,
             "statusMessage": "Running repo checks before commit..."
           }

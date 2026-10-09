@@ -27,6 +27,18 @@ try {
     Write-Host 'ok   Window.xaml loads'
 } catch { Fail "Window.xaml: $($_.Exception.InnerException.Message) $_" }
 
+# Workflow actions must be pinned to a full commit SHA, and the same action to the same SHA in every workflow
+$pins = @{}
+foreach ($wf in Get-ChildItem "$root\.github\workflows" -Filter *.yml) {
+    foreach ($m in [regex]::Matches((Get-Content $wf.FullName -Raw), '(?m)uses:\s*([^@\s]+)@(\S+)')) {
+        $action = $m.Groups[1].Value; $ref = $m.Groups[2].Value
+        if ($ref -notmatch '^[0-9a-f]{40}$') { Fail "$($wf.Name): $action@$ref is not pinned to a commit SHA" }
+        elseif ($pins.ContainsKey($action) -and $pins[$action] -ne $ref) { Fail "$($wf.Name): $action pinned to $ref, other workflows use $($pins[$action])" }
+        else { $pins[$action] = $ref }
+    }
+}
+Write-Host "ok   $($pins.Count) workflow actions pinned"
+
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$root\tests\SelfTest.ps1"
 if ($LASTEXITCODE) { Fail 'SelfTest.ps1' }
 
