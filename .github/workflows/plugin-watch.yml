@@ -1,0 +1,35 @@
+# Weekly check of the code-review plugin pinned in claude-code-review.yml (Dependabot does not bump that ref).
+# Opens an issue when the plugin changed upstream since the pinned commit.
+name: Plugin watch
+on:
+  schedule:
+    - cron: '23 6 * * 1'   # Mondays 06:23 UTC
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Compare pinned plugin with upstream main
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          $wf = Get-Content .github/workflows/claude-code-review.yml -Raw
+          if ($wf -notmatch '(?m)repository: anthropics/claude-code\s+ref: ([0-9a-f]{40})') { throw 'Pinned plugin ref not found in claude-code-review.yml' }
+          $pinned = $Matches[1]
+          $cmp = gh api "repos/anthropics/claude-code/compare/$pinned...main" | ConvertFrom-Json
+          $changed = @($cmp.files.filename | Where-Object { $_ -like 'plugins/code-review/*' -or $_ -eq '.claude-plugin/marketplace.json' })
+          if (-not $changed) { Write-Host "Plugin unchanged since $pinned ($($cmp.ahead_by) commits behind main)"; exit 0 }
+          $head = gh api repos/anthropics/claude-code/commits/main --jq .sha
+          $title = 'Code-review plugin changed upstream: bump the pinned ref'
+          $body = "These files changed in anthropics/claude-code since the pinned ``$pinned``:`n`n" +
+              (($changed | ForEach-Object { "- $_" }) -join "`n") +
+              "`n`nReview https://github.com/anthropics/claude-code/compare/$pinned...$head, then set ``ref:`` in .github/workflows/claude-code-review.yml to ``$head``.`n`nRun: $env:RUN"
+          $open = gh issue list --state open --search "in:title `"$title`"" --json number --jq '.[0].number'
+          if ($open) { gh issue comment $open --body "Still behind, main is now ``$head``: $env:RUN" }
+          else { gh issue create --title $title --body $body }

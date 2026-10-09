@@ -40,13 +40,18 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      # claude-code-plugins is reserved for the anthropics GitHub source, so a local copy needs another name
+      - name: Rename pinned marketplace
+        run: |
+          sed -i 's/"name": "claude-code-plugins"/"name": "pinned-review-plugins"/' .review-plugins/.claude-plugin/marketplace.json
+
       - name: Run Claude Code Review
         id: claude-review
         uses: anthropics/claude-code-action@2dca132ff0e0c4094ce6048b422c6915a071210b # v1.0.247
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: '${{ github.workspace }}/.review-plugins'
-          plugins: 'code-review@claude-code-plugins'
+          plugins: 'code-review@pinned-review-plugins'
           prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
           claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment"'
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
