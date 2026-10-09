@@ -47,4 +47,6 @@ jobs:
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
           # claude_args: '--allowed-tools Bash(gh pr *)'
+          # tests\Check.ps1 needs Windows (WPF, powershell.exe), so the pre-commit hook skips it on this runner
+          claude_args: '--append-system-prompt "This runner is Linux: do not try to run tests/Check.ps1 or other Windows-only checks. The Check workflow runs them on windows-latest after you push; say so in your reply."'
 
