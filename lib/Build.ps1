@@ -366,7 +366,9 @@ function Invoke-Build($Cfg, $Sync) {
             foreach ($img in Get-WindowsImage -ImagePath "$w\iso\sources\install.wim") {
                 if ($Sync.Cancel) { throw 'Cancelled by user' }
                 Write-Log "Small ISO: compressing $($img.ImageName) into install.esd - takes 10-20 minutes, no output meanwhile"
-                Export-WindowsImage -SourceImagePath "$w\iso\sources\install.wim" -SourceIndex $img.ImageIndex -DestinationImagePath "$w\iso\sources\install.esd" -CompressionType recovery | Out-Null
+                # dism.exe, not Export-WindowsImage: the cmdlet fails on 'recovery' ("The given key was not present in the dictionary").
+                $out = dism.exe /English /Export-Image "/SourceImageFile:$w\iso\sources\install.wim" "/SourceIndex:$($img.ImageIndex)" "/DestinationImageFile:$w\iso\sources\install.esd" /Compress:recovery
+                if ($LASTEXITCODE) { $out | Where-Object { "$_".Trim() } | Select-Object -Last 3 | ForEach-Object { Write-Log " dism: $_" }; throw "dism could not write install.esd ($LASTEXITCODE)" }
             }
             Remove-Item "$w\iso\sources\install.wim"
             Write-Log "install.esd: $([math]::Round((Get-Item "$w\iso\sources\install.esd").Length/1GB,2)) GB"
