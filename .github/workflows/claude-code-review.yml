@@ -42,7 +42,8 @@ jobs:
 
       # claude-code-plugins is reserved for the anthropics GitHub source, so a local copy needs another name
       - name: Rename pinned marketplace
-        run: sed -i 's/"name": "claude-code-plugins"/"name": "pinned-review-plugins"/' .review-plugins/.claude-plugin/marketplace.json
+        run: |
+          sed -i 's/"name": "claude-code-plugins"/"name": "pinned-review-plugins"/' .review-plugins/.claude-plugin/marketplace.json
 
       - name: Run Claude Code Review
         id: claude-review
