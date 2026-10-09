@@ -27,5 +27,6 @@ jobs:
             "https://github.com/rhysd/actionlint/releases/download/v${VERSION}/actionlint_${VERSION}_linux_amd64.tar.gz"
           echo "${SHA256}  $RUNNER_TEMP/actionlint.tgz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/actionlint.tgz" -C "$RUNNER_TEMP" actionlint
+          # shellcheck disable=SC2016 # $err is template syntax, not a shell variable
           "$RUNNER_TEMP/actionlint" -format '{{range $err := .}}::error file={{$err.Filepath}},line={{$err.Line}},col={{$err.Column}}::{{$err.Message}}
           {{end}}'
