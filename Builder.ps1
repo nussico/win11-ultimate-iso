@@ -150,20 +150,33 @@ function Start-Update {
     if ($script:job) { Show-Msg 'A build is running. Update when it is done.' | Out-Null; return }
     # Closing mid-scan is refused (an ISO would stay mounted) while the installer already runs: update when the scan ends.
     if ($script:scanning) { $script:updateAfterScan = $true; $ui.ScanResult.Text = 'Scanning your ISOs... the builder updates when done.'; return }
-    $env:W11UB_DIR = $root   # installer updates this folder instead of asking for a drive
-    $env:W11UB_SHA = $script:update.Latest   # exactly the commit that passed CI, not whatever main is by now
     # Saved and run from a file, not "irm | iex": a download-and-run pipe is what antivirus watches for.
-    # Random name: it runs elevated, so nothing else may guess the path and swap the file before it runs.
-    $installer = Join-Path $env:TEMP "w11ub-install-$([guid]::NewGuid().ToString('N')).ps1"
-    try { Invoke-WebRequest "https://raw.githubusercontent.com/$repo/$($script:update.Latest)/install.ps1" -OutFile $installer -UseBasicParsing -TimeoutSec 20 }
-    catch { Show-Msg "Could not download the update:`n`n$_" 'Error' | Out-Null; return }
-    # Waits until this window is closed (a second builder would only bring this one to the front), keeps a failure on
-    # screen instead of vanishing with the builder already gone, and deletes the installer afterwards.
-    $f = $installer -replace "'", "''"
-    $run = "Start-Sleep 2; try { & '$f' } catch { Write-Host `$_ -ForegroundColor Red; Read-Host 'Update failed. Press Enter to close' } finally { Remove-Item '$f' -ErrorAction SilentlyContinue }"
-    Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$run`""
+    # In a new folder only admins can write to: it runs elevated, so a non-admin program must not swap it first.
+    $stage = Join-Path $env:TEMP "w11ub-update-$([guid]::NewGuid().ToString('N'))"
+    try {
+        New-AdminFolder $stage
+        Invoke-WebRequest "https://raw.githubusercontent.com/$repo/$($script:update.Latest)/install.ps1" -OutFile "$stage\install.ps1" -UseBasicParsing -TimeoutSec 20
+    }
+    catch {
+        Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+        Show-Msg "Could not download the update:`n`n$_" 'Error' | Out-Null; return
+    }
+    $script:updateStage = $stage   # the installer starts once the window has closed (end of this file)
     $script:updating = $true
-    $win.Close()
+    # Started from a popup while the window is already closing: that close goes on (Close now would throw).
+    if (-not $script:closing) { $win.Close() }
+}
+# Creates a folder only Administrators and SYSTEM can open, with that ACL from the start (no gap to swap files in).
+function New-AdminFolder($Path) {
+    $sec = New-Object Security.AccessControl.DirectorySecurity
+    $sec.SetAccessRuleProtection($true, $false)
+    $admins = New-Object Security.Principal.SecurityIdentifier 'S-1-5-32-544'
+    foreach ($sid in $admins, (New-Object Security.Principal.SecurityIdentifier 'S-1-5-18')) {
+        $sec.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($sid, 'FullControl', 'ContainerInherit, ObjectInherit', 'None', 'Allow')))
+    }
+    $sec.SetOwner($admins)
+    if (Test-Path -LiteralPath $Path) { throw "$Path already exists" }
+    [IO.Directory]::CreateDirectory($Path, $sec) | Out-Null
 }
 # Popup once per new version (update-skip.txt remembers a "No"); the Update button stays either way.
 function Show-UpdatePopup($Latest, $News) {
@@ -915,14 +928,38 @@ $ui.BuildBtn.Add_Click({
         $timer.Start()
     })
 
+$script:closing = $false
 $win.Add_Closing({
         param($s, $e)
-        if ($script:job) { $e.Cancel = $true; Show-Msg 'A build is running. Cancel it first.' | Out-Null; return }
-        # Closing mid-scan would leave an ISO mounted.
-        if ($script:scanning) { $e.Cancel = $true; Show-Msg 'Scanning your ISOs. Close again in a moment.' | Out-Null; return }
+        $script:closing = $true
+        try {
+            if ($script:job) { $e.Cancel = $true; Show-Msg 'A build is running. Cancel it first.' | Out-Null; return }
+            # Closing mid-scan would leave an ISO mounted. If the scan ends while this message is open and starts a
+            # pending update, close after all.
+            if ($script:scanning) { $e.Cancel = $true; Show-Msg 'Scanning your ISOs. Close again in a moment.' | Out-Null; $e.Cancel = -not $script:updating; return }
+        }
+        finally { $script:closing = $false }
     })
 
 $ui.Preset.SelectedItem = 'Basic'
 Update-Editions
 $win.Add_ContentRendered({ Invoke-Scan })
 $win.ShowDialog() | Out-Null
+
+if ($script:updating) {
+    # Free the one-builder lock now, so the builder the installer starts is not taken for this one.
+    try { $instance.ReleaseMutex() } catch { }
+    # Paths go in through the environment, so no quoting can break the command. It waits for this process to end,
+    # keeps a failure on screen, starts this (unchanged) builder again if the install failed, and cleans up.
+    $env:W11UB_DIR = $root   # installer updates this folder instead of asking for a drive
+    $env:W11UB_SHA = $script:update.Latest   # exactly the commit that passed CI, not whatever main is by now
+    $env:W11UB_STAGE = $script:updateStage
+    $env:W11UB_WAIT = $PID
+    $run = 'Wait-Process -Id $env:W11UB_WAIT -Timeout 30 -ErrorAction SilentlyContinue; ' +
+    'try { & (Join-Path $env:W11UB_STAGE install.ps1) } ' +
+    'catch { Write-Host $_ -ForegroundColor Red; Write-Host ''Starting the old builder again.''; ' +
+    'Start-Process conhost.exe -WorkingDirectory $env:W11UB_DIR -ArgumentList ''--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File .\Builder.ps1''; ' +
+    'Read-Host ''Update failed. Press Enter to close'' } ' +
+    'finally { Remove-Item -LiteralPath $env:W11UB_STAGE -Recurse -Force -ErrorAction SilentlyContinue }'
+    Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$run`""
+}

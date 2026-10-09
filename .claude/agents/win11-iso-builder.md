@@ -73,8 +73,13 @@ The user wants things verified before a push (they approve UAC prompts for admin
 - 2026-10-09 08:54-09:11 Defender blocked the builder via AMSI (`VirTool:PowerShell/MaleficAms.W`): a cloud-delivered
   false positive, gone after its next cloud fetch. Not our code (files scan clean, elevated replays clean). Check the
   Defender log (1116 vs 2010 cloud fetches) before changing code for a detection.
-- The Update button saves install.ps1 to %TEMP% and runs it with `-File`. Don't go back to `irm | iex` there: a
-  download-and-run pipe is what antivirus watches for.
+- The Update button saves install.ps1 into a new admin-only folder (`New-AdminFolder`) and runs it after `ShowDialog`
+  returns, from a `-Command` wrapper: paths only via `$env:W11UB_*` (no quoting: PS also ends '...' at curly quotes),
+  `Wait-Process` on the old builder (+ mutex released), failure = message + old builder restarted, folder deleted.
+  Don't go back to `irm | iex` there (a download-and-run pipe is what antivirus watches for) or to a `Start-Sleep` guess.
+  Never call `$win.Close()` from code that can run inside the Closing handler (`$script:closing`): it throws.
+- install.ps1 makes the install folder admin-write-only (Users read, plus modify on sources\): the elevated builder
+  loads lib\ and runs cache\ scripts from there. Download/unpack only in admin-only folders, never fixed %TEMP% paths.
 - `$x = try { ... } catch { @() }` gives `$x = $null`, not an empty array; wrap the whole try in `@()` instead.
 - This PC has `NoDefaultCurrentDirectoryInExePath=1`: cmd won't run scripts from the current folder without `.\`.
 - UUP dump's `uup_download_windows.cmd` restarts itself elevated when not admin, and the original exits at once.

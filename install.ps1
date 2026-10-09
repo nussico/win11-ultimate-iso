@@ -78,13 +78,33 @@
             $sha = try { (Invoke-RestMethod "https://api.github.com/repos/$repo/commits/main" -Headers @{ Accept = 'application/vnd.github.sha' }).Trim() } catch { 'main' }
         }
     }
-    $zip = Join-Path $env:TEMP 'w11ub.zip'; $tmp = Join-Path $env:TEMP 'w11ub'
+    # The builder runs elevated and loads its code from $dir: only admins may change files there, or any program could
+    # plant code that runs as admin (a new folder on C:\ lets every user modify it). Everyone can still read
+    # (copy ISOs from out\) and drop ISOs into sources\. Not for a git checkout; FAT/exFAT drives have no permissions.
+    New-Item -ItemType Directory -Force "$dir\lib", "$dir\sources", "$dir\presets" | Out-Null
+    if (-not (Test-Path "$dir\.git")) {
+        $ErrorActionPreference = 'Continue'   # icacls stderr (e.g. TrustedInstaller leftovers in work\) must not stop the install
+        icacls $dir /setowner '*S-1-5-32-544' /T /C /Q 2>&1 | Out-Null
+        icacls $dir /inheritance:r /grant:r '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' /C /Q 2>&1 | Out-Null
+        icacls "$dir\sources" /grant '*S-1-5-32-545:(OI)(CI)M' /C /Q 2>&1 | Out-Null
+        $ErrorActionPreference = 'Stop'
+    }
+
+    # Downloaded and unpacked in a new folder only admins can write to, so nothing can swap files before they run.
+    $stage = Join-Path $env:TEMP "w11ub-$([guid]::NewGuid().ToString('N'))"
+    $sec = New-Object Security.AccessControl.DirectorySecurity
+    $sec.SetAccessRuleProtection($true, $false)
+    $admins = New-Object Security.Principal.SecurityIdentifier 'S-1-5-32-544'
+    foreach ($sid in $admins, (New-Object Security.Principal.SecurityIdentifier 'S-1-5-18')) {
+        $sec.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($sid, 'FullControl', 'ContainerInherit, ObjectInherit', 'None', 'Allow')))
+    }
+    $sec.SetOwner($admins)
+    [IO.Directory]::CreateDirectory($stage, $sec) | Out-Null
+    $zip = "$stage\w11ub.zip"; $tmp = "$stage\files"
     Invoke-WebRequest "https://github.com/$repo/archive/$sha.zip" -OutFile $zip -UseBasicParsing
-    if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
     Expand-Archive $zip $tmp
     # Unblock before copying: work\ in $dir can hold TrustedInstaller-owned leftovers that can't even be listed.
     Get-ChildItem $tmp -Recurse -File | Unblock-File
-    New-Item -ItemType Directory -Force "$dir\lib", "$dir\sources", "$dir\presets" | Out-Null
     # Only what the builder runs on (no docs, tests or repo files). Overwrites program files only;
     # your sources\, presets\, out\ and cache\ stay.
     $src = (Get-ChildItem $tmp)[0].FullName
@@ -96,7 +116,7 @@
             Remove-Item "$dir\$x" -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
-    Remove-Item $zip, $tmp -Recurse -Force
+    Remove-Item -LiteralPath $stage -Recurse -Force
     if ($sha -ne 'main') { Set-Content "$dir\version.txt" $sha } else { Remove-Item "$dir\version.txt" -ErrorAction SilentlyContinue }
 
     # conhost --headless: the builder opens without an extra console window
