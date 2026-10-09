@@ -83,6 +83,9 @@ The user wants things verified before a push (they approve UAC prompts for admin
 - 2026-10-09 08:54-09:11 Defender blocked the builder via AMSI (`VirTool:PowerShell/MaleficAms.W`): a cloud-delivered
   false positive, gone after its next cloud fetch. Not our code (files scan clean, elevated replays clean). Check the
   Defender log (1116 vs 2010 cloud fetches) before changing code for a detection.
+- 2026-10-09 16:27 the same detection came back with signatures 1.459.638.0 and stayed after a cloud fetch. Only the
+  Start-Background wrapper was blocked (`& ([scriptblock]::Create($work))` in the runspace); not reproducible non-elevated.
+  Start-Background now uses two AddScript statements instead. Don't bring back `[scriptblock]::Create` on passed text.
 - The Update button saves install.ps1 into a new admin-only folder (`New-AdminFolder`) and runs it after `ShowDialog`
   returns, from a `-Command` wrapper: paths only via `$env:W11UB_*` (no quoting: PS also ends '...' at curly quotes),
   `Wait-Process` on the old builder (+ mutex released), failure = message + old builder restarted, folder deleted.

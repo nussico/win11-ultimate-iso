@@ -271,6 +271,13 @@ Assert ($pj -match 'Max' -and $pj -match 'Valve.Steam' -and $pj -match 'hwchecks
     Assert ($t -match 'Builder 99cfb89' -and $t -match 'Windows 11 Pro' -and $t -match 'Valve.Steam' -and $t -notmatch 'secret1|AAAAA') 'Win11Ultimate.txt: version + choices, no secrets'
 }
 
+# Start-Background wiring (same as Builder.ps1): Source.ps1 functions and both arguments reach $Work.
+$ps = [powershell]::Create()
+$ps.AddScript('param($root) . "$root\lib\Source.ps1"').AddArgument($root).
+    AddStatement().AddScript("$({ param($root, $x) "$x $([bool](Get-Command Get-UupBuilds -ErrorAction SilentlyContinue)) $(Test-Path $root)" })").AddArgument($root).AddArgument('arg') | Out-Null
+Assert ("$($ps.Invoke())" -eq 'arg True True') 'Start-Background: $Work gets $root, $Arg and the lib\Source.ps1 functions'
+$ps.Dispose()
+
 # Background build wiring (same pattern as Builder.ps1). Cancel is preset, so nothing is built.
 $sync = [hashtable]::Synchronized(@{ Log = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]'; Step = 0; Cancel = $true; Done = $false; Error = $null })
 $ps = [powershell]::Create()
