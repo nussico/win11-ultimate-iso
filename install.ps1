@@ -123,5 +123,6 @@
     $launch = "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File `"$dir\Builder.ps1`""
     # The builder creates its shortcut in $dir itself on start (nothing in Start menu or desktop).
     Write-Host "Start it next time with: $dir\Win11 Ultimate ISO Builder" -ForegroundColor Cyan
+    if ($env:W11UB_NOLAUNCH) { return }   # install test (.github/workflows/install.yml)
     Start-Process conhost.exe -Verb RunAs -ArgumentList $launch
 }

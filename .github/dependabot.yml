@@ -1,0 +1,7 @@
+# Keeps the GitHub Actions used in .github/workflows up to date (one PR per update, checked monthly).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

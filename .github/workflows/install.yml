@@ -1,0 +1,40 @@
+# Runs install.ps1 for the pushed commit on a fresh Windows runner (admin, Windows PowerShell 5.1) and checks the result.
+# Separate from check.yml on purpose: a GitHub download hiccup here must not stop the builder offering an update.
+name: Install
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  install:
+    runs-on: windows-latest
+    steps:
+      - name: Install with install.ps1
+        shell: powershell
+        env:
+          W11UB_DIR: ${{ runner.temp }}\Win11UltimateBuilder
+          W11UB_SHA: ${{ github.sha }}
+          W11UB_NOLAUNCH: '1'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $code = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/${{ github.repository }}/$env:W11UB_SHA/install.ps1").Content
+          Invoke-Expression $code
+      - name: Check installed files
+        shell: powershell
+        env:
+          W11UB_DIR: ${{ runner.temp }}\Win11UltimateBuilder
+        run: |
+          $dir = $env:W11UB_DIR; $bad = 0
+          function Check($Cond, $Msg) { if ($Cond) { Write-Host "ok   $Msg" } else { Write-Host "FAIL $Msg"; $script:bad++ } }
+          foreach ($f in 'Builder.ps1', 'LICENSE', 'lib\Build.ps1', 'lib\Patches.ps1', 'lib\Source.ps1', 'lib\Unattend.ps1', 'lib\Window.xaml') {
+              Check (Test-Path "$dir\$f") "$f installed"
+          }
+          Check ((Get-Content "$dir\version.txt" -ErrorAction SilentlyContinue) -eq '${{ github.sha }}') 'version.txt is the pushed commit'
+          foreach ($x in 'tests', 'docs', '.claude', 'install.ps1', 'README.md') { Check (-not (Test-Path "$dir\$x")) "$x not installed" }
+          Check (Test-Path "$dir\sources") 'sources folder created'
+          # Only admins and SYSTEM may change program files (Users: read only, except sources\)
+          $acl = (Get-Acl $dir).Access | Where-Object { $_.IdentityReference -match 'Users$' -and $_.AccessControlType -eq 'Allow' }
+          Check (-not ($acl | Where-Object { $_.FileSystemRights -match 'Write|Modify|FullControl' })) 'Users cannot write the install folder'
+          if ($bad) { exit 1 }
