@@ -28,7 +28,9 @@ Moved the folder? Right-click `Builder.ps1` > *Run with PowerShell* once to fix 
 - **Newest Windows**: downloads the newest Windows 11 through [UUP dump](https://uupdump.net), or uses your own ISO.
   "Newest" means the newest version for every PC: versions only for certain new PCs (like 26H1) are skipped,
   but you can pick them under *Windows version*.
-  *Fast mode* (default) skips merging the latest update: about 15 instead of 60 minutes, and Windows Update catches up after setup.
+  *Download from*: **Microsoft** (default) gets the official ISO (an 8 GB download, about 10 minutes at 100 Mbit/s), and Windows Update installs the latest
+  update after setup. **UUP dump** merges the latest update in (about 60 minutes) and also offers Enterprise.
+  Either way the download is kept in `sources` and reused until a new Windows version comes out.
 - **Editions and language**: Home, Pro, Education, Enterprise. One language per ISO. With UUP dump on, the build uses an ISO with exactly
   the ticked editions: tick only Pro and it downloads a Pro-only ISO once (kept in `sources` next to the others).
 - **Patches**: no TPM/Secure Boot/CPU checks, local account, debloat, privacy, taskbar, Explorer, gaming and update tweaks.

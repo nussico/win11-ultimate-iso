@@ -183,18 +183,74 @@ Assert ((Get-BuildPlan @($both) @() $c).Base -eq $both) 'Plan: UUP unreachable -
 Assert ((Get-DownloadEditions 'Windows 11 Enterprise') -join ',' -eq 'Windows 11 Enterprise,Windows 11 Pro') 'Download of a virtual edition contains Pro'
 $c.Editions = @('Windows 11 Home', 'Windows 11 Pro')
 $fastIso = I 26300 'Windows 11 Pro' | Add-Member Fast $true -PassThru
-$c.Fast = $false
 $pl = Get-BuildPlan @($fastIso) $builds $c
-Assert (-not $pl.Base -and $pl.Missing.Count -eq 2) 'Plan: Fast-mode ISO not mixed into a full build'
-$c.Fast = $true; $c.Editions = @('Windows 11 Pro')
-Assert ((Get-BuildPlan @($fastIso) $builds $c).Base) 'Plan: Fast-mode ISO reused in Fast mode'
-$c.UseUup = $false; $c.Fast = $false
+Assert (-not $pl.Base -and $pl.Missing.Count -eq 2) 'Plan: old Fast-mode ISO not mixed into a build'
+$c.Editions = @('Windows 11 Pro')
+Assert (-not (Get-BuildPlan @($fastIso) $builds $c).Base) 'Plan: old Fast-mode ISO replaced by a full download'
+$c.UseUup = $false
 Assert ((Get-BuildPlan @($fastIso) $builds $c).Base) 'Plan: Fast-mode ISO used when UUP is off (only source)'
 
-$q = Get-UupRequest @('Windows 11 Pro') $true
-Assert ($q.Body -match 'updates=0' -and $q.Updates -eq 0 -and $q.Edition -eq 'PROFESSIONAL' -and $q.Body -match 'autodl=2') 'Fast mode: no update integration'
-$q = Get-UupRequest @('Windows 11 Home', 'Windows 11 Enterprise') $false
-Assert ($q.Body -match 'updates=1' -and $q.Edition -eq 'CORE;PROFESSIONAL' -and $q.Body -match 'autodl=3' -and $q.Body -match 'cleanup=1' -and $q.Body -match 'virtualEditions\[\]=Enterprise') 'Normal mode + virtual edition adds Pro base'
+# Download source Microsoft
+$c = @{ BaseLang = 'de-de'; Editions = @('Windows 11 Pro'); UseUup = $true; Download = 'Microsoft'; Newest = $true; UupBuild = ''; IsoFolder = 'src' }
+$pl = Get-BuildPlan @() $builds $c
+Assert ($pl.Microsoft -and $pl.Missing -eq 'Windows 11 Pro' -and -not $pl.Uup -and -not $pl.Error) 'Microsoft: no ISO -> official ISO download'
+Assert ((Get-BuildPlan @() @() $c).Microsoft) 'Microsoft: works without UUP dump'
+$pl = Get-UupFallbackPlan @() $builds $c
+Assert ($pl.Uup.uuid -eq 'f' -and -not $pl.Microsoft -and $c.Download -eq 'Microsoft') 'Microsoft refused: fallback plans the UUP download, config unchanged'
+Assert ((Get-UupFallbackPlan @() @() $c).Error) 'Microsoft refused and UUP dump unreachable: error'
+$pl = Get-BuildPlan @($both) $builds $c
+Assert ($pl.Base -eq $both -and -not $pl.Microsoft -and -not $pl.Missing) 'Microsoft: multi-edition ISO with the ticked edition is reused'
+$pl = Get-BuildPlan @(I 26100 'Windows 11 Pro') $builds $c
+Assert ($pl.Microsoft -and $pl.Base -and -not $pl.Missing -and $pl.Note) 'Microsoft: older ISO kept, download only if Microsoft has newer'
+$c.Newest = $false
+Assert (-not (Get-BuildPlan @(I 26100 'Windows 11 Pro') $builds $c).Microsoft) 'Microsoft: older ISO used as-is when newest is off'
+$c.Editions = @('Windows 11 Pro', 'Windows 11 Enterprise')
+Assert ((Get-BuildPlan @() $builds $c).Error -match 'Enterprise') 'Microsoft: Enterprise is not in the official ISO -> error'
+$c.Editions = @('Windows 11 Pro'); $c.BaseLang = 'xx-xx'
+Assert ((Get-BuildPlan @() $builds $c).Error -match 'no ISO in xx-xx') 'Microsoft: unknown language -> error'
+Assert (-not ($MsIsoLanguages.Keys | Where-Object { $_ -cne $_.ToLower() }) -and $MsIsoLanguages.Count -ge 38) 'Microsoft: language map uses lower-case codes'
+Assert (-not ($MsIsoEditions | Where-Object { -not $UupEditions.Contains($_) })) 'Microsoft: its editions are known editions'
+
+# Save-Download: local server sends 2 of 3 MB then goes silent (dead hotspot), then serves the rest on a Range request
+$data = New-Object byte[] (3MB); (New-Object Random 7).NextBytes($data)
+$listener = New-Object Net.Sockets.TcpListener ([Net.IPAddress]::Loopback), 0
+$listener.Start(); $port = $listener.LocalEndpoint.Port
+$server = [powershell]::Create().AddScript({
+    param($l, $data)
+    $ranges = @(); $open = @(); $w = [Text.Encoding]::ASCII
+    foreach ($i in 1, 2) {
+        # Gives up after 15 s without a connection, so a broken client can't hang the test
+        $end = (Get-Date).AddSeconds(15); while (-not $l.Pending() -and (Get-Date) -lt $end) { Start-Sleep -Milliseconds 50 }
+        if (-not $l.Pending()) { break }
+        $c = $l.AcceptTcpClient(); $open += $c; $s = $c.GetStream()
+        $r = New-Object IO.StreamReader $s; $h = ''
+        while (($line = $r.ReadLine())) { $h += "$line`n" }
+        $from = [regex]::Match($h, '(?i)range: *bytes=(\d+)-').Groups[1].Value; $ranges += $from
+        if ($i -eq 1) { $b = $w.GetBytes("HTTP/1.1 200 OK`r`nContent-Length: $($data.Length)`r`n`r`n"); $s.Write($b, 0, $b.Length); $s.Write($data, 0, 2MB) }
+        else {
+            $f = [int]$from
+            $b = $w.GetBytes("HTTP/1.1 206 Partial Content`r`nContent-Length: $($data.Length - $f)`r`nContent-Range: bytes $f-$($data.Length - 1)/$($data.Length)`r`nConnection: close`r`n`r`n")
+            $s.Write($b, 0, $b.Length); $s.Write($data, $f, $data.Length - $f)
+        }
+        $s.Flush()
+    }
+    Start-Sleep 1; $open | ForEach-Object { $_.Close() }
+    $ranges
+}).AddArgument($listener).AddArgument($data)
+$job = $server.BeginInvoke()
+$script:logged = ''
+$tmp = New-Item -ItemType Directory -Force "$env:TEMP\w11dltest"
+try { Save-Download "http://127.0.0.1:$port/a.iso" "$tmp\dl.iso" -StallSeconds 1 -Retries 2 } catch { Write-Host $_ }
+$ranges = @($server.EndInvoke($job)); $server.Dispose(); $listener.Stop()
+$sha = [Security.Cryptography.SHA256]::Create()
+$same = (Test-Path "$tmp\dl.iso") -and [Convert]::ToBase64String($sha.ComputeHash([IO.File]::ReadAllBytes("$tmp\dl.iso"))) -eq [Convert]::ToBase64String($sha.ComputeHash($data))
+Assert ($same -and [int]$ranges[1] -gt 0 -and $script:logged -match 'resuming at' -and -not (Test-Path "$tmp\dl.iso.part")) 'Save-Download: stalled connection resumes where it stopped'
+Remove-Item $tmp -Recurse -Force
+
+$q = Get-UupRequest @('Windows 11 Pro')
+Assert ($q.Body -match 'updates=1' -and $q.Edition -eq 'PROFESSIONAL' -and $q.Body -match 'autodl=2') 'UUP request always integrates the latest update (inbox apps need it)'
+$q = Get-UupRequest @('Windows 11 Home', 'Windows 11 Enterprise')
+Assert ($q.Body -match 'updates=1' -and $q.Edition -eq 'CORE;PROFESSIONAL' -and $q.Body -match 'autodl=3' -and $q.Body -match 'cleanup=1' -and $q.Body -match 'virtualEditions\[\]=Enterprise') 'Virtual edition adds Pro base'
 
 # Preset file: choices only, never secrets or paths
 $pd = Get-PresetData @{ BaseLang = 'de-de'; Editions = @('Windows 11 Pro'); Patches = @('hwchecks'); IsoFolder = 'D:\isos'; Output = 'D:\out\x.iso'

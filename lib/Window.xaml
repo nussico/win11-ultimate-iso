@@ -264,7 +264,7 @@
             <TextBlock Style="{StaticResource Hint}" Margin="14,0,0,0" VerticalAlignment="Center" Text="setup and Windows; keyboard and formats are on the Unattended page"/></StackPanel>
           <DockPanel><TextBlock Text="Editions" Style="{StaticResource Label}" VerticalAlignment="Top" Margin="0,5,0,0"/>
             <WrapPanel x:Name="EditionPanel"/></DockPanel>
-          <TextBlock Style="{StaticResource Hint}" Margin="120,0,0,0" Text="Tick one or more. Editions marked 'download' are not in your ISOs and come from UUP dump."/>
+          <TextBlock Style="{StaticResource Hint}" Margin="120,0,0,0" Text="Tick one or more. Editions marked 'download' are not in your ISOs and get downloaded."/>
         </StackPanel></Border>
         <!-- 2. Where the files come from -->
         <Border Style="{StaticResource Card}"><StackPanel>
@@ -275,10 +275,14 @@
             <TextBox x:Name="IsoFolder"/></DockPanel>
           <TextBlock x:Name="ScanResult" Style="{StaticResource Hint}" Margin="120,6,0,0" Text="Drop official Windows 11 ISOs into this folder and click Scan."/>
           <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Margin="0,16,0,16"/>
-          <CheckBox x:Name="UseUup" Style="{StaticResource Toggle}" Content="Download missing editions from UUP dump (Microsoft's own update servers)" IsChecked="True"/>
+          <CheckBox x:Name="UseUup" Style="{StaticResource Toggle}" Content="Download Windows when your ISOs don't have it (kept in this folder for next builds)" IsChecked="True"/>
           <StackPanel x:Name="UupOptions" Margin="50,0,0,0">
+            <StackPanel Style="{StaticResource Row}"><TextBlock Text="Download from" Style="{StaticResource Label}"/>
+              <ComboBox x:Name="Download" Width="460">
+                <ComboBoxItem Content="Microsoft - official ISO, 8 GB download (latest update installs after setup)" Tag="Microsoft" IsSelected="True"/>
+                <ComboBoxItem Content="UUP dump - latest update built in, about 60 min, all editions" Tag="Uup"/>
+              </ComboBox></StackPanel>
             <CheckBox x:Name="Newest" Style="{StaticResource Toggle}" Content="Always use the newest Windows (download it if your ISO is an older version)" IsChecked="True"/>
-            <CheckBox x:Name="Fast" Style="{StaticResource Toggle}" Content="Fast mode: about 15 instead of 60 minutes (Windows Update installs the latest update after setup)" IsChecked="True"/>
             <StackPanel Style="{StaticResource Row}" Margin="0,4,0,0"><TextBlock Text="Windows version" Style="{StaticResource Label}"/><ComboBox x:Name="Build" Width="380"/></StackPanel>
             <TextBlock x:Name="BuildHint" Style="{StaticResource Hint}" Margin="120,6,0,0" Text="Auto picks the newest build matching your ISO."/>
           </StackPanel>

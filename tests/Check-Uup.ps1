@@ -26,7 +26,7 @@ try {
     Check ('en-us' -in $langs) "listlangs.php returns languages ($($langs.Count), en-us included)"
 
     # The same package request a Pro build makes; the builder edits these ConvertConfig.ini keys
-    $req = Get-UupRequest @('Windows 11 Pro') $false
+    $req = Get-UupRequest @('Windows 11 Pro')
     New-Item -ItemType Directory -Force $tmp | Out-Null
     Invoke-WebRequest -UseBasicParsing -Method Post -Body $req.Body -ContentType 'application/x-www-form-urlencoded' -OutFile "$tmp\uup.zip" `
         "https://uupdump.net/get.php?id=$($newest.uuid)&pack=en-us&edition=$($req.Edition)"
@@ -36,6 +36,14 @@ try {
     Check $ini 'Package has ConvertConfig.ini'
     foreach ($key in 'AutoExit', 'AddUpdates', 'ResetBase', 'vAutoEditions') {
         Check ($ini -match "^$key\s*=") "ConvertConfig.ini has $key"
+    }
+    # Download source Microsoft: the official ISO link (one request; the API rate-limits repeated ones)
+    # Cloud runner IPs often get refused; that is Microsoft's rate limit, not a changed API.
+    try {
+        $ms = Get-MicrosoftIso 'en-us'
+        Check ($ms.Url -match '^https://.+\.iso' -and $ms.Build -match '^\d{5}$') "Microsoft ISO link: $($ms.File) (build $($ms.Build))"
+    } catch {
+        if ("$_" -match 'refused') { Write-Host "NOTE Microsoft ISO link refused (rate limit): $_" -ForegroundColor Yellow } else { throw }
     }
 } catch {
     Check $false "Unexpected error: $_"

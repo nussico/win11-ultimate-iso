@@ -242,13 +242,16 @@ $script:edChecks = [ordered]@{}
 function Update-Editions {
     # Keep ticks across rescans / language changes; none on start.
     $checked = @($script:edChecks.Keys | Where-Object { $script:edChecks[$_].IsChecked })
-    $use = @{ UseUup = [bool]$ui.UseUup.IsChecked; Fast = [bool]$ui.Fast.IsChecked }
+    $use = @{ UseUup = [bool]$ui.UseUup.IsChecked }
     $isos = $script:IsoInfos | Where-Object { $_.Lang -eq $ui.BaseLang.SelectedItem -and (Test-UsableIso $_ $use) }
     $names = @($isos | ForEach-Object { $_.Editions.Name } | Where-Object { $_ } | Select-Object -Unique)
     $all = @($names)
-    if ($ui.UseUup.IsChecked) { $all += @($UupEditions.Keys | Where-Object { $_ -notin $names }) }
+    # Microsoft's ISO has the consumer editions only; UUP dump also builds Enterprise.
+    $msSource = $ui.Download.SelectedItem.Tag -eq 'Microsoft'
+    if ($ui.UseUup.IsChecked) { $all += @($(if ($msSource) { $MsIsoEditions } else { $UupEditions.Keys }) | Where-Object { $_ -notin $names }) }
     $ui.EditionPanel.Children.Clear(); $script:edChecks = [ordered]@{}
     $ui.UupOptions.IsEnabled = [bool]$ui.UseUup.IsChecked; $ui.UupOptions.Opacity = if ($ui.UseUup.IsChecked) { 1 } else { 0.45 }
+    $ui.Build.IsEnabled = -not $msSource   # picking a build is UUP-only
     $prevEdition = $ui.Edition.SelectedItem
     $ui.Edition.Items.Clear()
     foreach ($e in $all) {
@@ -265,6 +268,7 @@ function Update-Editions {
 
 # Spells out which build "Auto" resolves to (same logic as the build plan).
 function Update-BuildHint {
+    if ($ui.Download.SelectedItem.Tag -eq 'Microsoft') { $ui.BuildHint.Text = 'Microsoft: the newest release as on microsoft.com. Pick UUP dump to choose a build.'; return }
     if ($ui.Build.SelectedIndex -gt 0) { $ui.BuildHint.Text = 'Downloads exactly this build when editions are missing.'; return }
     if ($script:uupLoading) { $ui.BuildHint.Text = 'Loading the build list from UUP dump...'; return }
     try {
@@ -422,7 +426,8 @@ function Import-PresetFile($p, $Name) {
         elseif ($c -is [Windows.Controls.ComboBox]) { if ("$v" -in @($c.Items)) { $c.SelectedItem = "$v" } }
         else { $c.Text = "$v" } }
     $script:applying = $true
-    foreach ($k in 'UseUup', 'Newest', 'Fast', 'Split', 'QuickCompress', 'DefenderExclude', 'BaseLang') { & $set $k $p.$k }
+    foreach ($k in 'UseUup', 'Newest', 'Split', 'QuickCompress', 'DefenderExclude', 'BaseLang') { & $set $k $p.$k }
+    $dl = @($ui.Download.Items | Where-Object Tag -eq $p.Download); if ($dl) { $ui.Download.SelectedItem = $dl[0] }   # older presets: keep the current source
     Update-Editions
     if ($p.PSObject.Properties['Editions']) { foreach ($e in $script:edChecks.Keys) { $script:edChecks[$e].IsChecked = $e -in @($p.Editions) } }
     if ($p.PSObject.Properties['Patches']) { foreach ($id in $patchChecks.Keys) { $patchChecks[$id].IsChecked = $id -in @($p.Patches) } }
@@ -487,7 +492,7 @@ function Invoke-Scan {
 $ui.ScanIsos.Add_Click({ if ($script:job) { Show-Msg 'Wait until the build is finished.' | Out-Null; return }; Invoke-Scan })
 $ui.BaseLang.Add_SelectionChanged({ Update-Editions })
 $ui.UseUup.Add_Click({ Update-Editions })
-$ui.Fast.Add_Click({ Update-Editions })
+$ui.Download.Add_SelectionChanged({ Update-Editions })
 $ui.Build.Add_SelectionChanged({ Update-BuildHint })
 $ui.Newest.Add_Click({ Update-BuildHint })
 
@@ -496,7 +501,7 @@ function Get-Config {
     $uuid = ''
     if ($ui.Build.SelectedIndex -gt 0) { $uuid = $script:buildList[$ui.Build.SelectedIndex - 1].uuid }
     @{
-        IsoFolder = $ui.IsoFolder.Text; UseUup = [bool]$ui.UseUup.IsChecked; Newest = [bool]$ui.Newest.IsChecked; Fast = [bool]$ui.Fast.IsChecked; UupBuild = $uuid; BaseLang = [string]$ui.BaseLang.SelectedItem
+        IsoFolder = $ui.IsoFolder.Text; UseUup = [bool]$ui.UseUup.IsChecked; Newest = [bool]$ui.Newest.IsChecked; Download = [string]$ui.Download.SelectedItem.Tag; UupBuild = $uuid; BaseLang = [string]$ui.BaseLang.SelectedItem
         Editions = @($script:edChecks.Keys | Where-Object { $script:edChecks[$_].IsChecked })
         Patches = @($Patches.Keys | Where-Object { $patchChecks[$_].IsChecked }); PatchMode = [string]$ui.PatchMode.SelectedItem.Tag; DriversPath = $ui.DriversPath.Text
         Unattend = @{
@@ -602,7 +607,7 @@ function Update-Plan {
         $script:planKey = if ($cached) { 'Cached' } elseif ($cfg.PatchMode -eq 'Setup') { 'Setup' } elseif ($cfg.QuickCompress) { 'Quick' } else { 'Max' }; $script:planEds = $cfg.Editions.Count
         $t = Get-Timing
         $img = $t.($script:planKey) * $(if ($cached) { 1 } else { $script:planEds })   # steps 3-9
-        $dl = if ($p.Missing) { if ($cfg.Fast) { 15 } else { 60 } } else { 0 }          # step 2
+        $dl = if ($p.Microsoft) { 20 } elseif ($p.Missing) { 60 } else { 0 }          # step 2
         $min = 1 + [math]::Ceiling($img) + $dl
         # Minutes per step for the progress bar and the time left. Shares of steps 3-9 come from real builds:
         # patching is the longest step, compression only matters at max compression, a cached image mostly writes the ISO.
@@ -620,7 +625,10 @@ function Update-Plan {
             Add-PlanRow 'Windows' "Your ISO, $(if ($ver) { "$ver, " })build $($p.Base.Build)" (Split-Path $p.Base.Path -Leaf)
         }
         if ($p.Missing -and $p.Uup) {
-            Add-PlanRow 'Windows' "$($p.Uup.title)" $(if ($cfg.Fast) { 'download, fast mode (updates install after setup)' } else { 'download incl. the latest update' })
+            Add-PlanRow 'Windows' "$($p.Uup.title)" 'download incl. the latest update'
+        }
+        if ($p.Microsoft) {
+            Add-PlanRow 'Windows' "Official Microsoft ISO$(if ($v = Get-ReleaseVersion $p.Newest) { ", $v" })" $(if ($p.Missing) { 'download, the latest update installs after setup' } else { 'download if newer than your ISO' })
         }
         Add-PlanRow 'Editions' ($cfg.Editions -join ', ')
         Add-PlanRow 'Language' $cfg.BaseLang

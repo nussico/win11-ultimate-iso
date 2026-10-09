@@ -262,7 +262,7 @@ $Presets = [ordered]@{
 # Preset file (Save/Load in the top bar): an allowlist of choices, so no password, product key or PC-specific paths.
 function Get-PresetData($Cfg) {
     $p = [ordered]@{}
-    foreach ($k in 'BaseLang', 'Editions', 'Patches', 'PatchMode', 'UseUup', 'Newest', 'Fast', 'Split', 'QuickCompress', 'DefenderExclude') { $p[$k] = $Cfg[$k] }
+    foreach ($k in 'BaseLang', 'Editions', 'Patches', 'PatchMode', 'UseUup', 'Download', 'Newest', 'Split', 'QuickCompress', 'DefenderExclude') { $p[$k] = $Cfg[$k] }
     $u = [ordered]@{}
     foreach ($k in 'Enabled', 'UserName', 'AutoLogon', 'Admin', 'ComputerName', 'TimeZone', 'Keyboard', 'Locale', 'SkipOobe', 'Edition', 'AutoInstall', 'RunWinUtil', 'EnableAdmin', 'Apps', 'WifiName') { $u[$k] = $Cfg.Unattend[$k] }
     $p.Unattend = $u; $p

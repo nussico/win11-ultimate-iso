@@ -59,7 +59,17 @@ The user wants things verified before a push (they approve UAC prompts for admin
 - Dot-sourced libs share script scope: `$script:` names can clash with params (case-insensitive). Build state is `$script:BuildSync`.
 - `takeown /r` fails on single files; use `/r /d` only for folders (`Remove-ImagePath`). The /d answer is localized (German `j`), so it retries y/j/o/s.
 - Dismount -Save is 3-5 silent minutes; always log before long DISM steps.
-- Fast mode UUP ISOs are build 26100.1; the `<iso>.build` sidecar records the real release so they get reused.
+- Fast mode (UUP without the latest update) was removed. Old Fast ISOs are build 26100.1 with a `<iso>.build` sidecar;
+  with downloads on they are replaced.
+- 2026-10-09: Defender (`Trojan:Win32/Commando.A!ml`, a command-line detection, so the work-folder exclusion doesn't help)
+  killed the UUP converter's `iex` of `CompDB_App.txt` (appx_sort): the ISO had no inbox apps at all. Step 4 now warns when a
+  mounted image has no provisioned apps. Default download source is Microsoft's official ISO (apps included).
+- Microsoft source (`Get-MicrosoftIso`): same API calls as Fido minus vlscppe.microsoft.com (online-metrix, blocked on this
+  network; not needed). The link API rate-limits per IP ("Sentinel marked this request as rejected") after ~2-3 quick requests:
+  don't loop it while testing.
+- `Save-Download`: reads use ReadAsync + Wait(timeout), since a dropped hotspot connection makes a plain Read hang forever.
+  It resumes with an HTTP Range request. On .NET Framework, a read may wait to fill the 1 MB buffer, so the SelfTest server
+  sends 2 MB before going silent.
 - `work\` can hold TrustedInstaller-owned leftovers; never scan it recursively without `-ErrorAction SilentlyContinue`.
 - Setup's boot.wim has cscript, WMI, diskpart, dism, bcdboot, robocopy but no PowerShell. Don't bring back the WinPE add-on
   (fails with hash mismatch 0x80091007 next to ADK 28000).

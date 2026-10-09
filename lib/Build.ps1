@@ -29,7 +29,7 @@ function Write-BuildHeader($Cfg) {
     Write-Log "Editions:       $($Cfg.Editions -join ', ')"
     Write-Log "Base language:  $($Cfg.BaseLang)"
     Write-Log "Patches:        $(if ($Cfg.Patches) { ($Cfg.Patches | ForEach-Object { $Patches[$_].Label }) -join '; ' } else { 'none' })$(if ($Cfg.PatchMode -eq 'Setup') { '  (applied during Windows Setup)' })"
-    Write-Log "Source:         ISO folder $($Cfg.IsoFolder); UUP dump $(if ($Cfg.UseUup) { 'on' } else { 'off' }); always newest $(if ($Cfg.Newest) { 'on' } else { 'off' }); fast mode $(if ($Cfg.Fast) { 'on' } else { 'off' })"
+    Write-Log "Source:         ISO folder $($Cfg.IsoFolder); download $(if (-not $Cfg.UseUup) { 'off' } elseif ($Cfg.Download -eq 'Microsoft') { 'Microsoft ISO' } else { 'UUP dump' }); always newest $(if ($Cfg.Newest) { 'on' } else { 'off' })"
     Write-Log "Unattended:     $(if ($u.Enabled) { "user '$($u.UserName)', auto-install $($u.AutoInstall), edition '$($u.Edition)', $(if ($u.ProductKey) { 'own product key' } else { 'generic key' }), skip OOBE $($u.SkipOobe)" } else { 'off' })"
     Write-Log "Output:         $($Cfg.Output)$(if ($Cfg.Split) { ' (install.wim split for FAT32)' })"
     Write-Log "Speed:          Defender exclusion $(if ($Cfg.DefenderExclude) { 'on' } else { 'off' }); compression $(if ($Cfg.QuickCompress) { 'quick' } else { 'max' })"
@@ -192,7 +192,9 @@ function Invoke-Build($Cfg, $Sync) {
         $found = @(Get-SourceIsos $Cfg.IsoFolder)
         foreach ($f in $found) { Write-Log "Found ISO $(Split-Path $f.Path -Leaf): build $($f.Build), $($f.Lang), $($f.Editions.Name -join ', ')" }
         if (-not $found) { Write-Log "No ISOs in $($Cfg.IsoFolder)" }
-        $builds = if ($Cfg.UseUup) { Get-UupBuilds } else { @() }
+        $msSource = $Cfg.UseUup -and $Cfg.Download -eq 'Microsoft'
+        # Microsoft source: UUP dump only says what the newest version is, so it may be down.
+        $builds = if (-not $Cfg.UseUup) { @() } elseif ($msSource) { @(try { Get-UupBuilds } catch { Write-Log "UUP dump not reachable ($_): no newest-version check" }) } else { Get-UupBuilds }
         $plan = Get-BuildPlan $found $builds $Cfg
         if ($plan.Newest) { Write-Log "Newest Windows: $($plan.Newest.title)" }
         if ($plan.Note) { Write-Log $plan.Note }
@@ -200,6 +202,38 @@ function Invoke-Build($Cfg, $Sync) {
         if ($plan.Error) { throw $plan.Error }
         $base = $plan.Base; $missing = $plan.Missing; $uup = $plan.Uup
         if ($uup) { Write-Log "UUP build: $($uup.title)" }
+        $ms = $null
+        if ($plan.Microsoft) {
+            try { $ms = Get-MicrosoftIso $Cfg.BaseLang }
+            catch {
+                # Only checking for a newer version: keep your ISO rather than a 60-minute UUP download.
+                if (-not $missing) { Write-Log "NOTE Microsoft download not available, using your ISO (build $($base.Build)): $_" }
+                else {
+                    Write-Log "WARN Microsoft download not available, falling back to UUP dump (about 60 minutes): $_"
+                    $plan = Get-UupFallbackPlan $found $builds $Cfg
+                    if ($plan.Error) { throw "Microsoft download not available and UUP dump can't step in: $($plan.Error)" }
+                    $base = $plan.Base; $missing = $plan.Missing; $uup = $plan.Uup
+                    if ($uup) { Write-Log "UUP build: $($uup.title)" }
+                }
+            }
+        }
+        if ($ms) {
+            Write-Log "Microsoft ISO: $($ms.File) (build $($ms.Build))"
+            if ($missing -or [int]$ms.Build -gt [int]$base.Build) {
+                Assert-FreeSpace $w $false
+                Write-Log "Downloading the official ISO from Microsoft (about 8 GB: 10 min at 100 Mbit/s, 25 at 50; the latest update installs after setup)"
+                $t = Get-Date
+                # Into the admin-only work folder first, then next to your ISOs so the next build reuses it.
+                Save-Download $ms.Url "$w\$($ms.File)" { $Sync.Cancel }
+                Write-Log "Download took $(Format-Duration ((Get-Date) - $t))"
+                New-Item -ItemType Directory -Force $Cfg.IsoFolder | Out-Null
+                $msIso = (Move-Item "$w\$($ms.File)" (Join-Path $Cfg.IsoFolder $ms.File) -Force -PassThru).FullName
+                Write-Log "Saved $($ms.File) to $($Cfg.IsoFolder) for next builds"
+                $base = Get-IsoInfo $msIso
+                $missing = @($Cfg.Editions | Where-Object { $_ -notin $base.Editions.Name })
+                if ($missing) { throw "Not in Microsoft's ISO: $($missing -join ', '). Pick UUP dump as the download source for these." }
+            } else { Write-Log "Not newer than your ISO (build $($base.Build)): using yours" }
+        }
         $sources = @()   # @{ Iso; Name }
         if ($base) {
             Write-Log "Base ISO: $($base.Path)"
@@ -208,9 +242,8 @@ function Invoke-Build($Cfg, $Sync) {
         if ($missing) {
             Assert-FreeSpace $w $false
             Write-Log "Downloading via UUP dump: $($missing -join ', ') (this takes a while)"
-            if ($Cfg.Fast) { Write-Log 'Fast mode: latest update not integrated (Windows Update installs it after setup)' }
             $t = Get-Date
-            $uupIso = Save-UupIso $uup.uuid $Cfg.BaseLang $missing "$w\uup" $Cfg.Fast { $Sync.Cancel }
+            $uupIso = Save-UupIso $uup.uuid $Cfg.BaseLang $missing "$w\uup" { $Sync.Cancel }
             Write-Log "UUP download + conversion took $(Format-Duration ((Get-Date) - $t))"
             # Keep it with your ISOs so the next build reuses it instead of downloading again.
             New-Item -ItemType Directory -Force $Cfg.IsoFolder | Out-Null
@@ -267,6 +300,11 @@ function Invoke-Build($Cfg, $Sync) {
                 if ($Sync.Cancel) { throw 'Cancelled by user' }
                 Write-Log "Mount $($img.Name) - takes 1-3 minutes"
                 Mount-WindowsImage -ImagePath "$w\install.wim" -Index $img.Index -Path "$w\mount" | Out-Null
+                # Defender has killed the UUP converter's app step (its iex command line reads as Trojan:Win32/Commando):
+                # the ISO then installs without Store, winget, Calculator...
+                if (-not @(Get-AppxProvisionedPackage -Path "$w\mount").Count) {
+                    Write-Log "WARN $($img.Name) has no inbox apps (Store, winget, Calculator...). From UUP dump this usually means Defender blocked the converter's app step: use Microsoft as the download source."
+                }
                 Invoke-Patches "$w\mount" $Cfg.Patches $Cfg
                 # ponytail: no StartComponentCleanup here (slow, small gain); the max-compression export in step 7 shrinks the image.
                 Write-Log "Saving $($img.Name) - writing the image and cleaning up takes 3-6 minutes, no output meanwhile"
