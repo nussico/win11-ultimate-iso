@@ -168,7 +168,8 @@ $Patches = [ordered]@{
     pinversion   = @{ Group = 'Updates'; Label = 'Stay on this Windows version'
         Desc = 'Windows Update keeps installing security updates but never moves to the next version (e.g. 25H2 to 26H2). Delete the TargetReleaseVersion policy later to upgrade.'
         Action = { param($m, $c)
-            $v = $c.ReleaseVersion   # the release the build was made from; else the image's own DisplayVersion
+            # The release the build was made from; the image's own DisplayVersion is older in Fast-mode UUP ISOs.
+            $v = $c.ReleaseVersion
             if (-not $Online) { Mount-Hive SOFTWARE "$m\Windows\System32\config\SOFTWARE" }
             try {
                 if (-not $v) { $v = Get-ItemPropertyValue "Registry::$(Convert-RegPath 'SOFTWARE\Microsoft\Windows NT\CurrentVersion')" DisplayVersion }

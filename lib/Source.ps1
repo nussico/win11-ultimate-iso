@@ -42,9 +42,19 @@ function Get-IsoInfo($Path) {
 
 function Get-SourceIsos($Folder) {
     foreach ($iso in Get-ChildItem $Folder -Filter *.iso -ErrorAction SilentlyContinue) {
-        try { Get-IsoInfo $iso.FullName } catch { Write-Warning "$($iso.Name): $_" }
+        try {
+            $info = Get-IsoInfo $iso.FullName
+            # UUP ISOs from the old Fast mode hold the base build without updates (e.g. 26100.1, no inbox apps);
+            # the sidecar records the release they came from. Fast = the image is older than that release.
+            $release = if (Test-Path "$($iso.FullName).build") { (Get-Content "$($iso.FullName).build").Split('.')[0] } else { $info.Build }
+            $info | Add-Member Fast ($release -ne $info.Build) -PassThru | Add-Member Build $release -Force -PassThru
+        } catch { Write-Warning "$($iso.Name): $_" }
     }
 }
+
+# A Fast-mode ISO holds the old base image (e.g. 24H2 for a 26H2 download): with UUP on, a full download replaces it
+# instead of mixing its editions and setup files into the build. Without UUP it's all there is.
+function Test-UsableIso($Iso, $Cfg) { -not ($Iso.Fast -and $Cfg.UseUup) }
 
 # Microsoft's ISO always holds Home, Pro and Education. Small ISO on and fewer of them ticked (e.g. only Pro) -> UUP dump
 # gets an image with just those. Editions Microsoft doesn't have (Enterprise) stay an error in Get-MicrosoftPlan.
@@ -61,7 +71,7 @@ function Get-BuildPlan($Isos, $Builds, $Cfg) {
     if ($msSubset) { $Cfg = $Cfg.Clone(); $Cfg.UupBuild = '' }
     $p = @{ Base = $null; Newest = (Select-NewestUupBuild $Builds); Missing = @(); Uup = $null; Microsoft = $false; Note = $null; Error = $null; Skipped = $null }
     if ($Cfg.Newest -and -not $Cfg.UupBuild) { $p.Skipped = Get-SkippedNewerRelease $Builds $p.Newest }
-    $isos = @($Isos | Where-Object Lang -eq $Cfg.BaseLang)
+    $isos = @($Isos | Where-Object { $_.Lang -eq $Cfg.BaseLang -and (Test-UsableIso $_ $Cfg) })
     if ($msSource -and -not $msSubset) { return (Get-MicrosoftPlan $p $isos $Cfg) }
     # With UUP: an ISO with exactly the ticked editions (only Pro -> a Pro-only ISO, downloaded once and kept next to
     # the multi-edition one). Without UUP (or UUP unreachable) any of your ISOs.

@@ -36,6 +36,8 @@ Verify before saying done; admin tests need a UAC prompt, so ask the user to app
 - UUP source: exactly the ticked editions (`Get-DownloadEditions`; Edu/Ent also bring Pro), one ISO with all of them, never
   own ISO + partial download. UUP off or unreachable: any own ISO.
 - UUP downloads use `cleanup=1` + `ResetBase=1` (else ~6 GB extra per edition). `<iso>.build` sidecars mark UUP downloads for Clean up.
+- Old Fast-mode ISOs (removed feature: base build without updates, no inbox apps) may still be on users' disks. The sidecar
+  flags them (`.Fast`); `Test-UsableIso` skips them when UUP is on. Keep that compat code.
 
 ## Conventions
 - Files are CRLF (`.gitattributes`).
