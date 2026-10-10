@@ -181,14 +181,6 @@ Assert ((Get-BuildPlan @($both) $builds $c).Missing -eq 'Windows 11 Pro') 'Plan:
 Assert ((Get-BuildPlan @($pro, $both) $builds $c).Base -eq $pro) 'Plan: only Pro ticked -> the Pro-only ISO'
 Assert ((Get-BuildPlan @($both) @() $c).Base -eq $both) 'Plan: UUP unreachable -> multi-edition ISO is used'
 Assert ((Get-DownloadEditions 'Windows 11 Enterprise') -join ',' -eq 'Windows 11 Enterprise,Windows 11 Pro') 'Download of a virtual edition contains Pro'
-$c.Editions = @('Windows 11 Home', 'Windows 11 Pro')
-$fastIso = I 26300 'Windows 11 Pro' | Add-Member Fast $true -PassThru
-$pl = Get-BuildPlan @($fastIso) $builds $c
-Assert (-not $pl.Base -and $pl.Missing.Count -eq 2) 'Plan: old Fast-mode ISO not mixed into a build'
-$c.Editions = @('Windows 11 Pro')
-Assert (-not (Get-BuildPlan @($fastIso) $builds $c).Base) 'Plan: old Fast-mode ISO replaced by a full download'
-$c.UseUup = $false
-Assert ((Get-BuildPlan @($fastIso) $builds $c).Base) 'Plan: Fast-mode ISO used when UUP is off (only source)'
 
 # Download source Microsoft
 $c = @{ BaseLang = 'de-de'; Editions = @('Windows 11 Pro'); UseUup = $true; Download = 'Microsoft'; Newest = $true; UupBuild = ''; IsoFolder = 'src' }

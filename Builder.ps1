@@ -244,8 +244,7 @@ $script:edChecks = [ordered]@{}
 function Update-Editions {
     # Keep ticks across rescans / language changes; none on start.
     $checked = @($script:edChecks.Keys | Where-Object { $script:edChecks[$_].IsChecked })
-    $use = @{ UseUup = [bool]$ui.UseUup.IsChecked }
-    $isos = $script:IsoInfos | Where-Object { $_.Lang -eq $ui.BaseLang.SelectedItem -and (Test-UsableIso $_ $use) }
+    $isos = $script:IsoInfos | Where-Object Lang -eq $ui.BaseLang.SelectedItem
     $names = @($isos | ForEach-Object { $_.Editions.Name } | Where-Object { $_ } | Select-Object -Unique)
     $all = @($names)
     # Microsoft's ISO has the consumer editions only; UUP dump also builds Enterprise.
